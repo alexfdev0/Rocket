@@ -75,8 +75,6 @@ readText = function(text, args)
 
     local otherf = {}
 
-
-
     local splitloc = 0
 
     if tokens[1] == "if" or tokens[1] == "function" then
