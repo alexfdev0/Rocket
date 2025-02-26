@@ -14,7 +14,8 @@ local validfirstclass = {
     "print",
     "if",
     "function",
-    "call"
+    "call",
+    "calc"
 }
 
 local errors = {
@@ -29,6 +30,9 @@ local errors = {
     [9] = "Function informational section not closed by a Do",
     [10] = "No semicolon detected in instruction.",
     [11] = "File could not be read",
+    [12] = "Not a valid number", 
+    [13] = "Not a valid arithmetic operation",
+    [14] = "Division by zero is not allowed"
 }
 
 function throwNew(typeo, error, args)
@@ -279,6 +283,39 @@ readText = function(text, args)
             else
                 throwNew("warning", 8, fname)
             end
+        elseif name == "calc" then
+            local fnum = tokens[2]
+            local op = tokens[3]
+            local lnum = tokens[4]
+            fnum = tonumber(fnum)
+            lnum = tonumber(lnum)
+            if fnum == nil or lnum == nil then
+                throwNew("error", 12, "")
+            end
+
+            if op ~= "+" and op ~= "-" and op ~= "*" and op ~= "/" then
+                throwNew("error", 13, "")
+            end
+
+            local res = "n/a"
+
+            if lnum == 0 and op == "/" then
+                throwNew("warning", 14, "")
+            else
+                if op == "+" then
+                    res = fnum + lnum
+                elseif op == "-" then
+                    res = fnum - lnum
+                elseif op == "*" then
+                    res = fnum * lnum
+                elseif op == "/" then
+                    res = fnum / lnum
+                end
+            end
+
+            if res ~= "n/a" then
+                print(res)
+            end
         end
     end
 
@@ -325,7 +362,7 @@ if filename ~= nil then
     file:close()
     readText(content)
 else
-    print("AScript version 1")
+    print("AScript version 1.01")
     local os = os.getenv("OS")
     if os then
         print("OS: " .. os)
