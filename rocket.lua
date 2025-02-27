@@ -1,4 +1,6 @@
-local variables = {}
+local variables = {
+    STD_SP = " ", -- Here until I can get proper spaces working.
+}
 
 local functions = {}
 
@@ -11,7 +13,8 @@ local validfirstclass = {
     "if",
     "function",
     "call",
-    "calc"
+    "calc",
+    "for"
 }
 
 local errors = {
@@ -32,7 +35,12 @@ local errors = {
     [15] = "String is either not opened or closed by quotes",
     [16] = "Variable does not exist",
     [17] = "Value not supplied",
-    [18] = "Illegal comparison"
+    [18] = "Illegal comparison",
+    [19] = "Do is not in the correct location for this type of for loop",
+    [20] = "For loop is not closed by an End",
+    [21] = "The all keyword shortcut is not allowed in this type of for loop",
+    [22] = "Itr was not at the expected place in the for loop",
+    [23] = "No variable name for itr in the for loop"
 }
 
 function throwNew(typeo, error, args)
@@ -100,37 +108,49 @@ function parseInput(valstart, tokens, checkfor, tokenassoc)
     end
     -- Check for arithmetic operation
     local opsect = tokens[valstart + 1]
-    if opsect == "+" or opsect == "-" or opsect == "*" or opsect == "/" or opsect == "^" then
+    if opsect == "+" or opsect == "-" or opsect == "*" or opsect == "/" or opsect == "^" or opsect == "<" then
         local fnum = tokens[valstart]
         local lnum = tokens[valstart + 2]
-        -- Check for if they are numbers or variables
-        if tonumber(fnum) then
-            fnum = tonumber(fnum)
+        -- Check type of arithmetic
+        if opsect == "<" then
+            local fstr = tokens[valstart]
+            local lstr = tokens[valstart + 2]
+
+            fstr = parseInput(1, { fstr })
+            lstr = parseInput(1, { lstr })
+
+            return fstr .. lstr
         else
-            if tonumber(getValueFromVariable(fnum)) then
-                fnum = tonumber(getValueFromVariable(fnum))
+            -- Check for if they are numbers or variables   
+            if tonumber(fnum) then
+                fnum = tonumber(fnum)
             else
-                if tonumber(getValueFromVariable(fnum)) ~= nil then
-                    throwNew("error", 12, "")
+                if tonumber(getValueFromVariable(fnum)) then
+                    fnum = tonumber(getValueFromVariable(fnum))
                 else
-                    throwNew("error", 16, "")
+                    if tonumber(getValueFromVariable(fnum)) ~= nil then
+                        throwNew("error", 12, "")
+                    else
+                        throwNew("error", 16, "")
+                    end
                 end
             end
-        end
-        if tonumber(lnum) then
-            lnum = tonumber(lnum)
-        else
-            if tonumber(getValueFromVariable(lnum)) then
-                lnum = tonumber(getValueFromVariable(lnum))
+            if tonumber(lnum) then
+                lnum = tonumber(lnum)
             else
-                if getValueFromVariable(lnum) ~= nil then
-                    throwNew("error", 12, "")
+                if tonumber(getValueFromVariable(lnum)) then
+                    lnum = tonumber(getValueFromVariable(lnum))
                 else
-                    throwNew("error", 16, "")
+                    if getValueFromVariable(lnum) ~= nil then
+                        throwNew("error", 12, "")
+                    else
+                        throwNew("error", 16, "")
+                    end
                 end
             end
+            return solve(fnum, opsect, lnum)
         end
-        return solve(fnum, opsect, lnum)
+        
     end
     -- Check for lone numbers
     if tonumber(tokens[valstart]) then
@@ -285,11 +305,11 @@ interpret = function(text, args)
         return
     end
 
-    if tokens[1] == "if" or tokens[1] == "function" then
+    if tokens[1] == "if" or tokens[1] == "function" or tokens[1] == "for" then
         local depth = 0
         
         for i = 1, #tokens do
-            if tokens[i] == "function" or tokens[i] == "if" then
+            if tokens[i] == "function" or tokens[i] == "if" or tokens[i] == "for" then
                 depth = depth + 1
             elseif tokens[i] == "end;" then
                 depth = depth - 1
@@ -453,14 +473,8 @@ interpret = function(text, args)
                 local args = functions[fname][2]
                 checkArgs(2 + #args, tokens)
                 for i, arg in pairs(args) do
-                    local argname = arg
-                    local relevantval
-                    if variables[tokens[2 + i]] then
-                        relevantval = variables[tokens[2 + i]]
-                    else
-                        relevantval = tokens[2 + i]
-                    end
-                    variables[argname] = relevantval
+                    local argname = arg 
+                    variables[argname] = parseInput(1, { tokens[i + 2] })  
                 end
                 interpret(functions[fname][1], functions[fname][2])
                 for i, arg in pairs(args) do
@@ -501,6 +515,75 @@ interpret = function(text, args)
 
             if res ~= "n/a" then
                 print(res)
+            end
+        elseif name == "for" then
+            --[[
+            For loop syntax:
+            "for <number or 'all'> in <table> itr <variable to iterate over> do <code> end"
+            "for <number> to <number> itr <variable> do <code> end"
+            ]]
+            local range = tokens[2]
+
+            if range ~= "all" then
+                range = parseInput(1, { tokens[2] })
+            end
+
+            local typeo = tokens[3]
+
+            -- 'In' loops not implemented for now.
+            if typeo == "to" then
+                local doloc = tokens[7]
+                local itr = tokens[5]
+                local itrval = tokens[6]
+                local funcstart = tokens[8]
+                local max = parseInput(1, { tokens[4] })
+                if not tonumber(max) then
+                    throwNew("error", 12, "")
+                end
+                if not tonumber(range) then
+                    if range == "all" then
+                        throwNew("error", 21, "")
+                    else
+                        throwNew("error", 12, "")
+                    end
+                end
+
+                if itr ~= "itr" then
+                    throwNew("error", 22, "")
+                end
+
+                if itrval == "do" then
+                    throwNew("error", 23, "")
+                end
+
+                if doloc ~= "do" then
+                    throwNew("error", 19, "")
+                end
+
+                if tokens[#tokens] ~= "end" then
+                    print("It was " .. tokens[#tokens] .. " instead. Tokens: " .. #tokens)
+                    throwNew("error", 20, "")
+                end
+
+                local funcend = #tokens - 1
+
+                local function exec(i)
+                    local str = ""
+                    for i = 8, funcend do
+                        if i == 8 then
+                            str = str .. tokens[i]
+                        else
+                            str = str .. " " .. tokens[i]
+                        end
+                    end
+                    variables[itrval] = i
+                    interpret(str)
+                    variables[itrval] = nil
+                end
+
+                for i = range, max do
+                    exec(i)
+                end
             end
         end
     end
@@ -556,9 +639,17 @@ if filename ~= nil then
     end
     local content = file:read("*a")
     file:close()
+
+    variables["STD_FILENAME"] = filename
+
+    for i, value in ipairs(arg) do
+        if arg[i + 1] then
+            variables["STD_ARG" .. tostring(i)] = arg[i + 1]
+        end
+    end
     interpret(content)
 else
-    print("Rocket version 2")
+    print("Rocket version 2.1")
     local os = os.getenv("OS")
     if os then
         print("OS: " .. os)
