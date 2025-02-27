@@ -1,5 +1,5 @@
 # Rocket
-A simple interpreted scripting language.<br>
+A simple, lightweight interpreted programming language.<br>
 # Requirements<br>
 Lua - You need to have Lua installed on your system as the interpreter is written in Lua.<br><br>
 # Installing Rocket<br>
