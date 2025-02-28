@@ -27,4 +27,5 @@ If you do not want to install MSYS2 or another tool to get Make onto your system
 lua rocket.out
 ```
 7. Save and close the file.<br>
-8. Add the `%localappdata%\rocket` folder to your environment PATH variable.
+8. Add the `%localappdata%\rocket` folder to your environment PATH variable.<br>
+9. Run `rocket.bat` or `rocket.bat <file>` to enter the Rocket command line or open a Rocket file.
