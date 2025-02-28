@@ -1,5 +1,11 @@
+#!/usr/bin/env lua
+-- Above line is for Unix-like OSes
+
 local variables = {
     STD_SP = " ", -- Here until I can get proper spaces working.
+    True = true,
+    False = false,
+    null = nil,
 }
 
 local functions = {}
@@ -33,14 +39,15 @@ local errors = {
     [13] = "Not a valid arithmetic operation",
     [14] = "Division by zero is not allowed",
     [15] = "String is either not opened or closed by quotes",
-    [16] = "Variable does not exist",
+    [16] = "Not a valid variable",
     [17] = "Value not supplied",
     [18] = "Illegal comparison",
     [19] = "Do is not in the correct location for this type of for loop",
     [20] = "For loop is not closed by an End",
     [21] = "The all keyword shortcut is not allowed in this type of for loop",
     [22] = "Itr was not at the expected place in the for loop",
-    [23] = "No variable name for itr in the for loop"
+    [23] = "No variable name for itr in the for loop",
+    [24] = "Variable is immutable"
 }
 
 function throwNew(typeo, error, args)
@@ -67,15 +74,16 @@ function checkArgs(expct, tokens)
     end
 end
 
-function getValueFromVariable(variable)
-    if variables[variable] then
+function getValueFromVariable(variable, assign)
+    if variables[variable] ~= nil then
         return variables[variable]
     else
+        throwNew("warning", 16, "'" .. variable .. "'")
         return nil
     end
 end
 
-function parseInput(valstart, tokens, checkfor, tokenassoc)
+function parseInput(valstart, tokens, checkfor, allowderef)
     --[[
     example: {"y", "=", "1", "+", "1"} (y = 1 in this istance)
     We need to parse it so it is {"y", "=", "2"}
@@ -88,7 +96,12 @@ function parseInput(valstart, tokens, checkfor, tokenassoc)
         elseif op == "*" then
             return fnum * lnum
         elseif op == "/" then
-            return fnum / lnum
+            if lnum == 0 then
+                throwNew("warning", 14, "")
+                return 0
+            else
+                return fnum / lnum
+            end
         elseif op == "^" then
             return fnum ^ lnum
         elseif op == "=" then
@@ -108,7 +121,7 @@ function parseInput(valstart, tokens, checkfor, tokenassoc)
     end
     -- Check for arithmetic operation
     local opsect = tokens[valstart + 1]
-    if opsect == "+" or opsect == "-" or opsect == "*" or opsect == "/" or opsect == "^" or opsect == "<" then
+    if opsect == "+" or opsect == "-" or opsect == "*" or opsect == "/" or opsect == "^" or opsect == "<" or opsect == "!=" then
         local fnum = tokens[valstart]
         local lnum = tokens[valstart + 2]
         -- Check type of arithmetic
@@ -120,6 +133,15 @@ function parseInput(valstart, tokens, checkfor, tokenassoc)
             lstr = parseInput(1, { lstr })
 
             return fstr .. lstr
+        elseif opsect == "!=" then
+            local fval = parseInput(1, { tokens[valstart] })
+            local lval = parseInput(1, { tokens[valstart + 2]})
+
+            if fval == lval then
+                return false
+            else
+                return true
+            end
         else
             -- Check for if they are numbers or variables   
             if tonumber(fnum) then
@@ -128,11 +150,7 @@ function parseInput(valstart, tokens, checkfor, tokenassoc)
                 if tonumber(getValueFromVariable(fnum)) then
                     fnum = tonumber(getValueFromVariable(fnum))
                 else
-                    if tonumber(getValueFromVariable(fnum)) ~= nil then
-                        throwNew("error", 12, "")
-                    else
-                        throwNew("error", 16, "")
-                    end
+                    throwNew("error", 12, "")
                 end
             end
             if tonumber(lnum) then
@@ -141,11 +159,7 @@ function parseInput(valstart, tokens, checkfor, tokenassoc)
                 if tonumber(getValueFromVariable(lnum)) then
                     lnum = tonumber(getValueFromVariable(lnum))
                 else
-                    if getValueFromVariable(lnum) ~= nil then
-                        throwNew("error", 12, "")
-                    else
-                        throwNew("error", 16, "")
-                    end
+                    throwNew("error", 12, "")
                 end
             end
             return solve(fnum, opsect, lnum)
@@ -162,20 +176,27 @@ function parseInput(valstart, tokens, checkfor, tokenassoc)
         if string.find(tokens[valstart], '"') then
             local count = 0
 
-            for _ in string.gmatch(tokens[valstart], '"') do
-                count = count + 1
+            local startp = string.find(tokens[valstart], '"+', 1, false)
+            local endp = string.find(tokens[valstart], '"+', 2, false)
+
+            if startp ~= 1 then
+                throwNew("error", 15, "")
             end
 
-            if count < 2 then
+            if endp ~= #tokens[valstart] then
                 throwNew("error", 15, "")
             end
 
             tokens[valstart] = tokens[valstart]:gsub('"', "")
         else
-            if getValueFromVariable(tokens[valstart]) then
+            if getValueFromVariable(tokens[valstart]) ~= nil then
                 tokens[valstart] = getValueFromVariable(tokens[valstart])
             else
-                throwNew("error", 16, "")
+                if allowderef ~= true then
+                    throwNew("error", 16, "")
+                else
+                    tokens[valstart] = getValueFromVariable(tokens[valstart])
+                end
             end
         end
         return tokens[valstart]
@@ -188,6 +209,9 @@ function parseInput(valstart, tokens, checkfor, tokenassoc)
             end
         end
         if valend == 0 then
+            throwNew("error", 15, "")
+        end
+        if not string.find(tokens[valstart], '"') then
             throwNew("error", 15, "")
         end
         tokens[valstart] = tokens[valstart]:gsub('"', "")
@@ -217,11 +241,11 @@ local function compare(tokens, condstart, condend)
         local equalloc = 0
 
         for i = condstart, #tokens do
-            if tokens[i] ~= "=" then
-                table.insert(firsttokens, tokens[i])
-            else
+            if tokens[i] == "=" or tokens[i] == "!=" then
                 equalloc = i
                 break
+            else
+                table.insert(firsttokens, tokens[i])
             end
         end
 
@@ -251,11 +275,11 @@ local function compare(tokens, condstart, condend)
         local thenloc = condend + 1
         
         for i = condstart, #tokens do
-            if tokens[i] ~= "=" then
-                table.insert(restokens, tokens[i])
-            else
+            if tokens[i] == "=" or tokens[i] == "!=" then
                 equalloc = i
                 break
+            else
+                table.insert(restokens, tokens[i])
             end
         end
 
@@ -597,11 +621,15 @@ interpret = function(text, args)
             if not tokens[3] then
                 throwNew("error", 17, "")
             end
-            
-            local res = parseInput(valstart, tokens)
 
-            if res then
-                variables[vname] = res
+            if vname == "STD_SP" or vname == "True" or vname == "False" or vname == "null" then
+                throwNew("warning", 24, vname)
+            else
+                local res = parseInput(valstart, tokens, false, true)
+
+                if res then
+                    variables[vname] = res
+                end
             end
         end
     end
@@ -625,7 +653,7 @@ end
 local exec
 
 exec = function()
-    io.write("rocket > ")
+    io.write("> ")
     local string = io.read("*l")
     interpret(string)
     exec()
@@ -649,7 +677,11 @@ if filename ~= nil then
     end
     interpret(content)
 else
-    print("Rocket version 2.1")
+    print("Rocket 2.2")
+    print("Find out more at rocket.alexflax.xyz")
+    print("Made by alexfdev0 at https://github.com/alexfdev0")
+    print("Licensed under GNU GPL 3.0")
+    print("Copyright (c) 2025 Alexander Flax")
     local os = os.getenv("OS")
     if os then
         print("OS: " .. os)
