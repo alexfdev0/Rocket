@@ -47,7 +47,7 @@ local errors = {
     [21] = "The all keyword shortcut is not allowed in this type of for loop",
     [22] = "Itr was not at the expected place in the for loop",
     [23] = "No variable name for itr in the for loop",
-    [24] = "Variable is immutable"
+    [24] = "Variable is immutable",
 }
 
 function throwNew(typeo, error, args)

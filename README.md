@@ -7,7 +7,7 @@ Make - Make is a build system. All Unix-like OSes should have this installed by 
 # Installing Rocket<br>
 To install Rocket, first download the source code from the releases page,<br>
 Once it's downloaded, extract the compressed folder.<br>
-Navigate to the extracted folder and run `make` in the terminal to install it. (Requires sudo permissions)<br>
+Navigate to the extracted folder and run `make` in the terminal to install it. (Requires sudo permissions) **NOTE: On MacOS, make sure you change `/usr/bin` to `/usr/local/bin` in the Makefile..**<br>
 Run `rocket` or `rocket <file>` to enter the Rocket command line or open a Rocket file.<br><br>
 # Running a file<br>
 The preferred file extension for Rocket files is .rocket, however any extension you fancy will work.<br>
