@@ -2,7 +2,7 @@
 -- Above line is for Unix-like OSes
 
 local variables = {
-    STD_SP = " ", -- Here until I can get proper spaces working.
+    STD_SP = " ",
     True = true,
     False = false,
     null = nil,
@@ -48,10 +48,12 @@ local errors = {
     [22] = "Itr was not at the expected place in the for loop",
     [23] = "No variable name for itr in the for loop",
     [24] = "Variable is immutable",
+    [25] = "Table was not closed by closing brace",
+    
 }
 
-function throwNew(typeo, error, args)
-    etext = errors[error]
+local function throwNew(typeo, error, args)
+    local etext = errors[error]
     if typeo == "warning" then
         print("Warning: " .. etext .. " " .. args .. " (Warning " .. tostring(error) .. ")")
     elseif typeo == "error" then
@@ -60,7 +62,7 @@ function throwNew(typeo, error, args)
     end
 end
 
-function checkArgs(expct, tokens)
+local function checkArgs(expct, tokens)
     if #tokens > expct then
         local extras = ""
         for i = expct + 1, #tokens do
@@ -74,7 +76,7 @@ function checkArgs(expct, tokens)
     end
 end
 
-function getValueFromVariable(variable, assign)
+local function getValueFromVariable(variable, assign)
     if variables[variable] ~= nil then
         return variables[variable]
     else
@@ -83,7 +85,7 @@ function getValueFromVariable(variable, assign)
     end
 end
 
-function parseInput(valstart, tokens, checkfor, allowderef)
+local function parseInput(valstart, tokens, checkfor, allowderef)
     --[[
     example: {"y", "=", "1", "+", "1"} (y = 1 in this istance)
     We need to parse it so it is {"y", "=", "2"}
@@ -172,59 +174,122 @@ function parseInput(valstart, tokens, checkfor, allowderef)
         return tonumber(tokens[valstart])
     end
     -- Check for strings
-    if valstart == #tokens then
-        if string.find(tokens[valstart], '"') then
-            local count = 0
-
-            local startp = string.find(tokens[valstart], '"+', 1, false)
-            local endp = string.find(tokens[valstart], '"+', 2, false)
-
-            if startp ~= 1 then
-                throwNew("error", 15, "")
-            end
-
-            if endp ~= #tokens[valstart] then
-                throwNew("error", 15, "")
-            end
-
-            tokens[valstart] = tokens[valstart]:gsub('"', "")
-        else
-            if getValueFromVariable(tokens[valstart]) ~= nil then
-                tokens[valstart] = getValueFromVariable(tokens[valstart])
+    if tokens[valstart] ~= "{" then
+        if valstart == #tokens then
+            if string.find(tokens[valstart], '"') then
+                local count = 0
+    
+                local startp = string.find(tokens[valstart], '"+', 1, false)
+                local endp = string.find(tokens[valstart], '"+', 2, false)
+    
+                if startp ~= 1 then
+                    throwNew("error", 15, "")
+                end
+    
+                if endp ~= #tokens[valstart] then
+                    throwNew("error", 15, "")
+                end
+    
+                tokens[valstart] = tokens[valstart]:gsub('"', "")
             else
-                if allowderef ~= true then
-                    throwNew("error", 16, "")
-                else
+                if getValueFromVariable(tokens[valstart]) ~= nil then
                     tokens[valstart] = getValueFromVariable(tokens[valstart])
+                else
+                    if allowderef ~= true then
+                        throwNew("error", 16, "")
+                    else
+                        tokens[valstart] = getValueFromVariable(tokens[valstart])
+                    end
                 end
             end
+            return tokens[valstart]
+        else
+            local valend = 0
+            for i = valstart + 1, #tokens do
+                if string.find(tokens[i], '"') then
+                    valend = i
+                    break
+                end
+            end
+            if valend == 0 then
+                throwNew("error", 15, "")
+            end
+            if not string.find(tokens[valstart], '"') then
+                throwNew("error", 15, "")
+            end
+            tokens[valstart] = tokens[valstart]:gsub('"', "")
+            tokens[valend] = tokens[valend]:gsub('"', "")
+            local str = ""
+            for i = valstart, valend do
+                if i == valstart then
+                    str = str .. tokens[i]
+                else
+                    str = str .. " " .. tokens[i]
+                end
+            end
+            return str
         end
-        return tokens[valstart]
-    else
-        local valend = 0
-        for i = valstart + 1, #tokens do
-            if string.find(tokens[i], '"') then
-                valend = i
+    end
+    -- Check for tables
+    if tokens[valstart] == "{" then
+        local tablestart = valstart
+        local tableend = 0
+        local depth = 0
+        for i = valstart, #tokens do
+            if tokens[i] == "{" then
+                depth = depth + 1
+            elseif tokens[i] == "}" then
+                depth = depth - 1
+            end
+            if tokens[i] == "}" and depth == 0 then
+                tableend = i
                 break
             end
         end
-        if valend == 0 then
-            throwNew("error", 15, "")
+        if tableend == 0 then
+            throwNew("error", 25, "")
         end
-        if not string.find(tokens[valstart], '"') then
-            throwNew("error", 15, "")
-        end
-        tokens[valstart] = tokens[valstart]:gsub('"', "")
-        tokens[valend] = tokens[valend]:gsub('"', "")
-        local str = ""
-        for i = valstart, valend do
-            if i == valstart then
-                str = str .. tokens[i]
-            else
-                str = str .. " " .. tokens[i]
+
+        --[[
+            Syntax: a = {
+                "hi",   
+            }
+            a = {
+                b = "hi",
+            }
+            
+        ]]
+
+        local assocs = {}
+        local tokenignore = {}
+        local tableToInsert = {}
+        local tokensToParse = {}
+
+        for i = valstart + 1, tableend - 1 do
+            if not tokenignore[i] == true then
+                if not (tonumber(tokens[i]) and string.find(tokens[i], '"')) then
+                    -- Associative array
+                    local name = tokens[i]
+
+                    -- Find comma and remove it and parse value
+                    for j = i + 2, #tokens do
+                        if tokens[j]:match(",$") then
+                            tokens[j] = tokens[j]:gsub(",$", "")
+                            table.insert(assocs, {name, parseInput(1, { tokens[j] })})
+                            break;
+                        end
+                    end
+
+                    
+end
             end
         end
-        return str
+
+        tokensToParse[#tokensToParse] = tokensToParse[#tokensToParse]:gsub(",$", "")
+
+        local value = parseInput(1, tokensToParse)
+
+        table.insert(tableToInsert, value)
     end
 end
 
@@ -347,7 +412,7 @@ interpret = function(text, args)
         end
     else
         for i = 1, #tokens do
-            token = tokens[i]
+            local token = tokens[i]
             if string.find(token, ";") then
                 tokens[i] = tokens[i]:gsub(";", "")
                 splitloc = i
@@ -650,13 +715,13 @@ interpret = function(text, args)
     end
 end
 
-local exec
+local cmdline
 
-exec = function()
+cmdline = function()
     io.write("> ")
     local string = io.read("*l")
     interpret(string)
-    exec()
+    cmdline()
 end
 
 local filename = arg[1]
@@ -682,9 +747,16 @@ else
     print("Made by alexfdev0 at https://github.com/alexfdev0")
     print("Licensed under GNU GPL 3.0")
     print("Copyright (c) 2025 Alexander Flax")
-    local os = os.getenv("OS")
-    if os then
-        print("OS: " .. os)
+    local OS = os.getenv("OS")
+    if OS == "Windows_NT" then
+        print("OS: Windows NT (Win32)")
+    elseif os.execute("uname -s > /dev/null") then
+        local handle = io.popen("uname -s")
+        local result = handle:read("*a")
+        handle:close()
+        print("OS: " .. result:gsub("\n", ""))
+    else
+        print("OS: Unknown Unix-like OS")
     end
-    exec()
+    cmdline()
 end
