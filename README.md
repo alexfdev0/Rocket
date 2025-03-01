@@ -1,5 +1,6 @@
 # Rocket
 A simple, lightweight interpreted programming language.<br>
+Documentation [rocket.alexflax.xyz](https://rocket.alexflax.xyz/)<br>
 # Requirements<br>
 NOTE (for Windows users only): Rocket is not officially supported on Windows. Any Windows-specific guides like installing Lua for Windows or modifying your environment PATH variable will not be listed here, as they can be found with a quick online search. If something on Rocket does not work with Windows but works on Unix-like OSes, (MacOS, Linux, etc.) **Do not make an issue about it.** The only Windows-specific guide that will be provided here is the basic install guide.<br><br>
 Lua - You need to have Lua installed on your system as the interpreter is written in Lua.<br>
