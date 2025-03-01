@@ -16,18 +16,18 @@ The preferred file extension for Rocket files is .rocket, however any extension 
 To open a Rocket file, type `rocket <rocket file>`<br>
 To open the Rocket command line, type `rocket`<br><br>
 # Manual Compilation for Windows Users<br>
-If you're on Windows, please follow the '<br><br>
+If you're on Windows, please follow the guide below to install Rocket.<br><br>
 
 1. Extract the compressed folder where the Rocket source code is located.<br>
 2. Create a directory in `C:\` named `rocket`<br>
 3. Open the command line and navigate to the folder where Rocket is located<br>
-4. Run the following command in Command Prompt as administrator: `luac -o C:\rocket rocket.lua` If you get an error that `luac` cannot be found, add Lua to your PATH variable.<br>
+4. Run the following command in Command Prompt as administrator: `luac -o C:\rocket\rocket.out rocket.lua` If you get an error that `luac` cannot be found, add Lua to your PATH variable.<br>
 5. Create a new file in `C:\rocket` titled `rocket.bat`<br>
 6. Put the following contents into the file:<br>
 ```batch
 @echo off
-lua rocket.out
+lua C:\rocket\rocket.out
 ```
 7. Save and close the file.<br>
 8. Add the `C:\rocket` folder to your environment PATH variable.<br>
-9. Run `rocket.bat` or `rocket.bat <file>` to enter the Rocket command line or open a Rocket file.
+9. Run `rocket` or `rocket <file>` to enter the Rocket command line or open a Rocket file.
