@@ -17,7 +17,7 @@ EXECUTABLE_MAC=/usr/local/bin/rocket
 INSTALL_DIR_WIN=$(LOCALAPPDATA)\rocket
 EXECUTABLE_WIN=$(INSTALL_DIR_WIN)\rocket.bat
 
-.PHONY: all clean
+.PHONY: clean
 
 unix: $(SRC)/rocket.lua
 	sudo mkdir -p $(INSTALL_DIR)
