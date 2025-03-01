@@ -231,66 +231,7 @@ local function parseInput(valstart, tokens, checkfor, allowderef)
         end
     end
     -- Check for tables
-    if tokens[valstart] == "{" then
-        local tablestart = valstart
-        local tableend = 0
-        local depth = 0
-        for i = valstart, #tokens do
-            if tokens[i] == "{" then
-                depth = depth + 1
-            elseif tokens[i] == "}" then
-                depth = depth - 1
-            end
-            if tokens[i] == "}" and depth == 0 then
-                tableend = i
-                break
-            end
-        end
-        if tableend == 0 then
-            throwNew("error", 25, "")
-        end
-
-        --[[
-            Syntax: a = {
-                "hi",   
-            }
-            a = {
-                b = "hi",
-            }
-            
-        ]]
-
-        local assocs = {}
-        local tokenignore = {}
-        local tableToInsert = {}
-        local tokensToParse = {}
-
-        for i = valstart + 1, tableend - 1 do
-            if not tokenignore[i] == true then
-                if not (tonumber(tokens[i]) and string.find(tokens[i], '"')) then
-                    -- Associative array
-                    local name = tokens[i]
-
-                    -- Find comma and remove it and parse value
-                    for j = i + 2, #tokens do
-                        if tokens[j]:match(",$") then
-                            tokens[j] = tokens[j]:gsub(",$", "")
-                            table.insert(assocs, {name, parseInput(1, { tokens[j] })})
-                            break;
-                        end
-                    end
-
-                    
-end
-            end
-        end
-
-        tokensToParse[#tokensToParse] = tokensToParse[#tokensToParse]:gsub(",$", "")
-
-        local value = parseInput(1, tokensToParse)
-
-        table.insert(tableToInsert, value)
-    end
+    -- Not implemented yet
 end
 
 local function compare(tokens, condstart, condend)
