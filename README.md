@@ -19,15 +19,15 @@ To open the Rocket command line, type `rocket`<br><br>
 If you're on Windows, please follow the '<br><br>
 
 1. Extract the compressed folder where the Rocket source code is located.<br>
-2. Create a directory in `%localappdata%` named `rocket`<br>
+2. Create a directory in `C:\` named `rocket`<br>
 3. Open the command line and navigate to the folder where Rocket is located<br>
-4. Run the following command in Command Prompt as administrator: `luac -o %localappdata%\rocket rocket.lua` If you get an error that `luac` cannot be found, add it <br>
-5. Create a new file in `%localappdata\rocket` titled `rocket.bat`<br>
+4. Run the following command in Command Prompt as administrator: `luac -o C:\rocket rocket.lua` If you get an error that `luac` cannot be found, add Lua to your PATH variable.<br>
+5. Create a new file in `C:\rocket` titled `rocket.bat`<br>
 6. Put the following contents into the file:<br>
 ```batch
 @echo off
 lua rocket.out
 ```
 7. Save and close the file.<br>
-8. Add the `%localappdata%\rocket` folder to your environment PATH variable.<br>
+8. Add the `C:\rocket` folder to your environment PATH variable.<br>
 9. Run `rocket.bat` or `rocket.bat <file>` to enter the Rocket command line or open a Rocket file.
