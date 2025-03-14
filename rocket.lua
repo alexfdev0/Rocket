@@ -2,10 +2,13 @@
 -- Above line is for Unix-like OSes
 
 local variables = {
-    STD_SP = " ",
-    True = true,
-    False = false,
-    null = nil,
+    [0x0] = { -- Global scope
+        {"STD_SP", " "},
+        {"True", true},
+        {"False", false},
+        {"null", nil},
+        {"STD_SCOPE_ADDR", 0x0}
+    },
 }
 
 local functions = {}
@@ -15,12 +18,20 @@ local validsecondclass = {
 }
 
 local validfirstclass = {
+    -- General purpose functions
     "print",
     "if",
     "function",
     "call",
     "calc",
-    "for"
+    "for",
+    -- Scope package functions
+    "scope_create",
+    "scope_destroy",
+    "scope_add",
+    "scope_remove",
+    "scope_get",
+    "scope_transfer",
 }
 
 local errors = {
@@ -49,8 +60,15 @@ local errors = {
     [23] = "No variable name for itr in the for loop",
     [24] = "Variable is immutable",
     [25] = "Table was not closed by closing brace",
-    
+    [26] = "Out of scope space",
+    [27] = "Low on scope space, consider freeing up unused scopes",
+    [28] = "Operating in invalid scope",
+    [29] = "Invalid scope",
+    [30] = "Failed to get table inheritance tree. No higher scope variables will be auto-referenced.",
+    [31] = "Scope out of range (Must be between 0x001 and 0xfff [12 bit])"
 }
+
+local scopes = {}
 
 local function throwNew(typeo, error, args)
     local etext = errors[error]
@@ -76,20 +94,62 @@ local function checkArgs(expct, tokens)
     end
 end
 
-local function getValueFromVariable(variable, assign)
-    if variables[variable] ~= nil then
-        return variables[variable]
+local function declareVariable(scope, name, value)
+    scope = tonumber(scope)
+    if not variables[scope] then
+        throwNew("warning", 28, "")
+        return
+    end
+    local alreadyassigned = false
+    for i, variable in pairs(variables[scope]) do
+        if type(variable) == "table" then
+            if name == variable[1] then
+                variables[scope][i][2] = value
+                alreadyassigned = true
+            end
+        end
+    end
+    if alreadyassigned == false then
+        table.insert(variables[scope], {name, value})
+    end
+end
+
+local function getValueFromVariable(variablename, scope, silent)
+    local found = false
+    if scope == nil then
+        scope = 0x0
+    end
+    if variables[scope] then
+        for _, variable in pairs(variables[scope]) do
+            if type(variable) == "table" then
+                local name = variable[1]
+                local value = variable[2]
+                if variablename == name then
+                    found = true
+                    return value
+                end
+            end
+        end
     else
-        throwNew("warning", 16, "'" .. variable .. "'")
+        if silent ~= true then
+            throwNew("warning", 29, "'" .. variablename .. "'")
+        end
+        return nil
+    end
+    if found == false then
+        throwNew("warning", 16, "'" .. variablename .. "'")
         return nil
     end
 end
 
-local function parseInput(valstart, tokens, checkfor, allowderef)
+local function parseInput(valstart, tokens, checkfor, allowderef, scope)
     --[[
     example: {"y", "=", "1", "+", "1"} (y = 1 in this istance)
     We need to parse it so it is {"y", "=", "2"}
     ]]
+    if scope == nil then
+        scope = 0x0
+    end
     local function solve(fnum, op, lnum)
         if op == "+" then
             return fnum + lnum
@@ -114,30 +174,28 @@ local function parseInput(valstart, tokens, checkfor, allowderef)
             end
         end
     end
-    -- Check for lone variable
-    if valstart == #tokens and checkfor == true then
-        if getValueFromVariable(tokens[valstart]) then
-            return getValueFromVariable(tokens[valstart])
-            -- If not then assume it is a string being passed and move it along.
-        end
+     -- Check for lone numbers
+     if tonumber(tokens[valstart]) and valstart == #tokens then
+        checkArgs(valstart, tokens)
+        return tonumber(tokens[valstart])
     end
     -- Check for arithmetic operation
     local opsect = tokens[valstart + 1]
-    if opsect == "+" or opsect == "-" or opsect == "*" or opsect == "/" or opsect == "^" or opsect == "<" or opsect == "!=" then
+    if opsect == "+" or opsect == "-" or opsect == "*" or opsect == "/" or opsect == "^" or opsect == "<<" or opsect == "!=" then
         local fnum = tokens[valstart]
         local lnum = tokens[valstart + 2]
         -- Check type of arithmetic
-        if opsect == "<" then
+        if opsect == "<<" then
             local fstr = tokens[valstart]
             local lstr = tokens[valstart + 2]
 
-            fstr = parseInput(1, { fstr })
-            lstr = parseInput(1, { lstr })
+            fstr = parseInput(1, { fstr }, true, false, scope)
+            lstr = parseInput(1, { lstr }, true, false, scope)
 
             return fstr .. lstr
         elseif opsect == "!=" then
-            local fval = parseInput(1, { tokens[valstart] })
-            local lval = parseInput(1, { tokens[valstart + 2]})
+            local fval = parseInput(1, { tokens[valstart] }, true, false, scope)
+            local lval = parseInput(1, { tokens[valstart + 2] }, true, false, scope)
 
             if fval == lval then
                 return false
@@ -149,8 +207,8 @@ local function parseInput(valstart, tokens, checkfor, allowderef)
             if tonumber(fnum) then
                 fnum = tonumber(fnum)
             else
-                if tonumber(getValueFromVariable(fnum)) then
-                    fnum = tonumber(getValueFromVariable(fnum))
+                if tonumber(getValueFromVariable(fnum, scope)) then
+                    fnum = tonumber(getValueFromVariable(fnum, scope))
                 else
                     throwNew("error", 12, "")
                 end
@@ -158,8 +216,8 @@ local function parseInput(valstart, tokens, checkfor, allowderef)
             if tonumber(lnum) then
                 lnum = tonumber(lnum)
             else
-                if tonumber(getValueFromVariable(lnum)) then
-                    lnum = tonumber(getValueFromVariable(lnum))
+                if tonumber(getValueFromVariable(lnum, scope)) then
+                    lnum = tonumber(getValueFromVariable(lnum, scope))
                 else
                     throwNew("error", 12, "")
                 end
@@ -167,11 +225,6 @@ local function parseInput(valstart, tokens, checkfor, allowderef)
             return solve(fnum, opsect, lnum)
         end
         
-    end
-    -- Check for lone numbers
-    if tonumber(tokens[valstart]) then
-        checkArgs(valstart, tokens)
-        return tonumber(tokens[valstart])
     end
     -- Check for strings
     if tokens[valstart] ~= "{" then
@@ -192,13 +245,13 @@ local function parseInput(valstart, tokens, checkfor, allowderef)
     
                 tokens[valstart] = tokens[valstart]:gsub('"', "")
             else
-                if getValueFromVariable(tokens[valstart]) ~= nil then
-                    tokens[valstart] = getValueFromVariable(tokens[valstart])
+                if getValueFromVariable(tokens[valstart], scope, true) ~= nil then
+                    tokens[valstart] = getValueFromVariable(tokens[valstart], scope)
                 else
                     if allowderef ~= true then
-                        throwNew("error", 16, "")
+                        return nil
                     else
-                        tokens[valstart] = getValueFromVariable(tokens[valstart])
+                        tokens[valstart] = getValueFromVariable(tokens[valstart], scope)
                     end
                 end
             end
@@ -230,11 +283,18 @@ local function parseInput(valstart, tokens, checkfor, allowderef)
             return str
         end
     end
+    -- Check for lone variable
+    if valstart == #tokens and checkfor == true then
+        if getValueFromVariable(tokens[valstart], scope, true) then
+            return getValueFromVariable(tokens[valstart], scope)
+            -- If not then assume it is a string being passed and move it along.
+        end
+    end
     -- Check for tables
     -- Not implemented yet
 end
 
-local function compare(tokens, condstart, condend)
+local function compare(tokens, condstart, condend, scope)
     local format = 0
     if tokens[condstart + 1] == "=" then
         format = 1
@@ -255,7 +315,7 @@ local function compare(tokens, condstart, condend)
             end
         end
 
-        local firstres = parseInput(1, firsttokens)
+        local firstres = parseInput(1, firsttokens, true, false, scope)
 
         if equalloc == 0 then
             throwNew("error", 18, "")
@@ -265,7 +325,7 @@ local function compare(tokens, condstart, condend)
             table.insert(secondtokens, tokens[i])
         end
 
-        local secondres = parseInput(1, secondtokens)
+        local secondres = parseInput(1, secondtokens, true, false, scope)
 
         if firstres == secondres then
             return true
@@ -289,7 +349,7 @@ local function compare(tokens, condstart, condend)
             end
         end
 
-        local first = parseInput(1, restokens)
+        local first = parseInput(1, restokens, true, false, scope)
 
         if equalloc == 0 then
             throwNew("error", 18, "")
@@ -299,7 +359,7 @@ local function compare(tokens, condstart, condend)
             table.insert(exptokens, tokens[i])
         end
 
-        local second = parseInput(1, exptokens)
+        local second = parseInput(1, exptokens, true, false, scope)
 
         if first == second then
             return true
@@ -309,11 +369,80 @@ local function compare(tokens, condstart, condend)
     end
 end
 
+local function scopeHandle(action, scope, current, silent)
+    if action == "create" then
+        if tonumber(scope) then
+            if scope > 0xfff or scope < 0x001 then
+                throwNew("error", 31, "")
+            end
+        end
+        if #scopes >= 0xfff then
+            throwNew("error", 26, "")
+        end
+        
+        if 0xfff - #scopes <= 1000 then
+            throwNew("warning", 27, "")
+        end
+           
+        local gen
+        while true do
+            local found = false
+            math.randomseed(os.time())
+            gen = math.random(0x001, 0xfff)
+            for i = 1, #scopes do
+                if scopes[i] == gen then
+                    found = true
+                end
+            end
+            if found == false then
+                break
+            end
+        end
+
+        local getInheritance
+        getInheritance = function(child, modify)
+            if child.inheritance ~= nil then
+                for _, pair in pairs(variables[child.inheritance]) do
+                    if type(pair) == "table" then
+                        table.insert(modify, pair)
+                    end
+                end
+                getInheritance(variables[child.inheritance], modify)
+            end
+        end
+        local sId = 0
+        if tonumber(scope) then
+            sId = tonumber(scope)
+        else
+            sId = gen
+        end
+        if variables[sId] == nil then
+            variables[sId] = {}
+        end
+        variables[sId].inheritance = current
+        getInheritance(variables[sId], variables[sId])
+        table.insert(scopes, scope)
+        declareVariable(sId, "STD_SCOPE_ADDR", sId)
+        return sId
+    elseif action == "destroy" then
+        for i = 1, #scopes do
+            if i == scope then
+                table.remove(scopes, i)
+            end
+        end
+        variables[scope] = nil
+    end
+end
+
 local interpret
 
 interpret = function(text, args)
     if args == nil then
         args = {}
+    end
+
+    if args.definedScope == nil then
+        args.definedScope = 0x0
     end
 
     local tokens = {}
@@ -395,7 +524,7 @@ interpret = function(text, args)
     if func == true then
         local name = tokens[1]
         if name == "print" then
-            local res = parseInput(2, tokens, true)
+            local res = parseInput(2, tokens, true, false, args.definedScope)
             if res then
                 print(res)
             end
@@ -444,10 +573,12 @@ interpret = function(text, args)
                         portion = portion .. " " .. tokens[i]
                     end
                 end
-                interpret(portion)
+                local scope = scopeHandle("create", nil, args.definedScope)
+                interpret(portion, {definedScope = scope})
+                scopeHandle("destroy", scope)
             end
 
-            if compare(tokens, 2, thenloc - 1) then
+            if compare(tokens, 2, thenloc - 1, args.definedScope) then
                 execFunc()
             end
         elseif name == "function" then
@@ -500,16 +631,19 @@ interpret = function(text, args)
         elseif name == "call" then
             local fname = tokens[2]
             if functions[fname] then
-                local args = functions[fname][2]
+                local args_ = functions[fname][2]
                 checkArgs(2 + #args, tokens)
-                for i, arg in pairs(args) do
-                    local argname = arg 
-                    variables[argname] = parseInput(1, { tokens[i + 2] })  
+                local scope = scopeHandle("create", nil, args.definedScope)
+                for i, arg in pairs(args_) do
+                    local argname = arg
+                    declareVariable(scope, argname, parseInput(1, { tokens[i + 2] }, true, false, args.definedScope))
                 end
+                functions[fname][2].definedScope = scope
                 interpret(functions[fname][1], functions[fname][2])
-                for i, arg in pairs(args) do
-                    variables[arg] = nil
+                for i, arg in pairs(args_) do
+                    declareVariable(scope, arg, nil)
                 end
+                scopeHandle("destroy", scope)
             else
                 throwNew("warning", 8, fname)
             end
@@ -555,7 +689,7 @@ interpret = function(text, args)
             local range = tokens[2]
 
             if range ~= "all" then
-                range = parseInput(1, { tokens[2] })
+                range = parseInput(1, { tokens[2] }, true, false, args.definedScope)
             end
 
             local typeo = tokens[3]
@@ -566,7 +700,7 @@ interpret = function(text, args)
                 local itr = tokens[5]
                 local itrval = tokens[6]
                 local funcstart = tokens[8]
-                local max = parseInput(1, { tokens[4] })
+                local max = parseInput(1, { tokens[4] }, true, false, args.definedScope)
                 if not tonumber(max) then
                     throwNew("error", 12, "")
                 end
@@ -591,13 +725,13 @@ interpret = function(text, args)
                 end
 
                 if tokens[#tokens] ~= "end" then
-                    print("It was " .. tokens[#tokens] .. " instead. Tokens: " .. #tokens)
                     throwNew("error", 20, "")
                 end
 
                 local funcend = #tokens - 1
 
-                local function exec(i)
+                local scope = scopeHandle("create", nil, args.definedScope)
+                local function exec(inum, scope)
                     local str = ""
                     for i = 8, funcend do
                         if i == 8 then
@@ -606,15 +740,59 @@ interpret = function(text, args)
                             str = str .. " " .. tokens[i]
                         end
                     end
-                    variables[itrval] = i
-                    interpret(str)
-                    variables[itrval] = nil
+                    
+                    declareVariable(scope, itrval, inum)
+                    interpret(str, {definedScope = scope})
+                    declareVariable(scope, itrval, nil)
                 end
 
                 for i = range, max do
-                    exec(i)
+                    exec(i, scope)
                 end
+                scopeHandle("destroy", scope)
             end
+        elseif name == "scope_create" then
+            local addr = parseInput(2, tokens, true, false, args.definedScope)
+            scopeHandle("create", addr, 0x0, true)
+        elseif name == "scope_destroy" then
+            local addr = parseInput(2, tokens, true, false, args.definedScope)
+            scopeHandle("destroy", addr, nil)
+        elseif name == "scope_add" then
+            local addr = parseInput(1, { tokens[2] }, true, false, args.definedScope)
+            local vname = tokens[3]
+            declareVariable(addr, vname, parseInput(4, tokens, true, false, args.definedScope))
+        elseif name == "scope_remove" then
+            local addr = parseInput(1, { tokens[2] }, true, false, args.definedScope)
+            local vname = tokens[3]
+            declareVariable(addr, vname, nil)
+        elseif name == "scope_get" then
+            local addr = parseInput(1, { tokens[2] }, true, false, args.definedScope)
+            local vname = tokens[3]
+            local value = getValueFromVariable(vname, addr)
+            print(value)
+        elseif name == "scope_transfer" then
+            local addrfrom = parseInput(1, { tokens[2] }, true, false, args.definedScope)
+            local addrto = parseInput(1, { tokens[3] }, true, false, args.definedScope)
+            local vname = tokens[4]
+            local vvalue
+            if variables[addrfrom] then
+                if variables[addrto] then
+                    for _, variable in pairs(variables[addrfrom]) do
+                        if type(variable) == "table" then
+                            local name = variable[1]
+                            local value = variable[2]
+                            if name == vname then
+                                vvalue = value
+                            end
+                        end
+                    end
+                else
+                    throwNew("warning", 29, "")
+                end
+            else
+                throwNew("warning", 29, "")
+            end
+            declareVariable(addrto, vname, vvalue)
         end
     end
 
@@ -631,10 +809,12 @@ interpret = function(text, args)
             if vname == "STD_SP" or vname == "True" or vname == "False" or vname == "null" then
                 throwNew("warning", 24, vname)
             else
-                local res = parseInput(valstart, tokens, false, true)
+                local res = parseInput(valstart, tokens, false, true, args.definedScope)
 
-                if res then
-                    variables[vname] = res
+                if args.definedScope then
+                    declareVariable(args.definedScope, vname, res)
+                else
+                    declareVariable(0x0, vname, res)
                 end
             end
         end
@@ -652,7 +832,7 @@ interpret = function(text, args)
             end
         end
 
-        interpret(str, {})
+        interpret(str, {definedScope = args.definedScope})
     end
 end
 
@@ -674,18 +854,18 @@ if filename ~= nil then
     local content = file:read("*a")
     file:close()
 
-    variables["STD_FILENAME"] = filename
+    declareVariable(0x0, "STD_FILENAME", filename)
 
     for i, value in ipairs(arg) do
         if arg[i + 1] then
-            variables["STD_ARG" .. tostring(i)] = arg[i + 1]
+            declareVariable(0x0, "STD_ARG" .. tostring(i), arg[i + 1])
         end
     end
     interpret(content)
 else
-    print("Rocket 2.2")
+    print("Rocket v3.0")
     print("Find out more at rocket.alexflax.xyz")
-    print("Made by alexfdev0 at https://github.com/alexfdev0")
+    print("Made by alexfdev0 at github.com/alexfdev0")
     print("Licensed under GNU GPL 3.0")
     print("Copyright (c) 2025 Alexander Flax")
     local OS = os.getenv("OS")
