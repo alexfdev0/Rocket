@@ -5,6 +5,13 @@ Documentation: [rocket.alexflax.xyz](https://rocket.alexflax.xyz/)<br>
 NOTE (for Windows users only): Rocket is not officially supported on Windows. Any Windows-specific guides like installing Lua for Windows or modifying your environment PATH variable will not be listed here, as they can be found with a quick online search. If something on Rocket does not work with Windows but works on Unix-like OSes, (MacOS, Linux, etc.) **Do not make an issue about it.** The only Windows-specific guide that will be provided here is the basic install guide.<br><br>
 Lua - You need to have Lua installed on your system as the interpreter is written in Lua.<br>
 Make - Make is a build system. All Unix-like OSes should have this installed by default.<br><br>
+# Officially supported platforms<br>
+Linux<br>
+MacOS<br>
+FreeBSD<br><br>
+# Unofficially supported platforms<br>
+Windows<br>
+Roblox<br><br>
 # Installing Rocket<br>
 To install Rocket, first download the source code from the releases page,<br>
 Once it's downloaded, extract the compressed folder.<br>
