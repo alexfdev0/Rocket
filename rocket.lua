@@ -35,6 +35,7 @@ local validfirstclass = {
 	"create_item",
 	"destroy_item",
 	"edit_property",
+	"instance_call"
 }
 
 local errors = {
