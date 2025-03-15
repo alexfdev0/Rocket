@@ -70,7 +70,7 @@ local errors = {
 	[29] = "Invalid scope",
 	[30] = "Failed to get table inheritance tree. No higher scope variables will be auto-referenced.",
 	[31] = "Scope out of range (Must be between 0x001 and 0xfff [12 bit])",
-	[32] = "This function can only be called inside of a Roblox environment"
+	[32] = "This function can only be called inside of a Roblox environment",
 }
 
 local scopes = {}

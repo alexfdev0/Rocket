@@ -33,7 +33,7 @@ If you're on Windows, please follow the guide below to install Rocket.<br><br>
 6. Put the following contents into the file:<br>
 ```batch
 @echo off
-lua C:\rocket\rocket.out
+lua C:\rocket\rocket.out %1
 ```
 7. Save and close the file.<br>
 8. Add the `C:\rocket` folder to your environment PATH variable.<br>
