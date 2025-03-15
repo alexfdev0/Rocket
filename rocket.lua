@@ -847,6 +847,12 @@ interpret = function(text, args)
 			else
 				throwNew("warning", 32, "")
 			end
+		elseif name == "instance_call" then
+			local path = tokens[2]
+			path = path:gsub('"', "")
+			local cfunc = tokens[3]
+			cfunc = cfunc:gsub('"', "")
+			loadstring(path .. ":" .. cfunc)()
 		end
 	end
 
