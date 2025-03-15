@@ -31,6 +31,7 @@ local validfirstclass = {
 	"scope_remove",
 	"scope_get",
 	"scope_transfer",
+	"scope_list",
 	-- Roblox reserved functions
 	"create_item",
 	"destroy_item",
@@ -73,7 +74,9 @@ local errors = {
 	[32] = "This function can only be called inside of a Roblox environment",
 }
 
-local scopes = {}
+local scopes = {
+	0x0,
+}
 
 local function throwNew(typeo, err, args)
 	local etext = errors[err]
@@ -802,6 +805,10 @@ interpret = function(text, args)
 				throwNew("warning", 29, "")
 			end
 			declareVariable(addrto, vname, vvalue)
+		elseif name == "scope_list" then
+			for _, scope in pairs(scopes) do
+				print("0x" .. string.lower(string.format("%X", scope)))
+			end
 		elseif name == "wait" then
 			local ttw = parseInput(1, { tokens[2] }, true, false, args.definedScope)
 			if getValueFromVariable("STD_IS_ROBLOX", 0x0) == true then
