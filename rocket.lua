@@ -814,9 +814,11 @@ interpret = function(text, args)
 			if getValueFromVariable("STD_IS_ROBLOX") == true then
 				local name = parseInput(1, { tokens[2] }, true, false, args.definedScope)
 				local _type = parseInput(1, { tokens[3] }, true, false, args.definedScope)
-				local New = Instance.new(_type)
-				New.Name = name
-				New.Parent = workspace
+				pcall(function() 
+                    local New = Instance.new(_type)
+                    New.Name = name
+                    New.Parent = workspace
+                end)
 			else
 				throwNew("warning", 32, "")
 			end
@@ -825,7 +827,9 @@ interpret = function(text, args)
 				
 				local path = tokens[2]
 				path = path:gsub('"', "")
-				loadstring(path .. ":Destroy()")()
+				pcall(function()
+                    loadstring(path .. ":Destroy()")()
+                end)
 			else
 				throwNew("warning", 32, "")
 			end
@@ -844,7 +848,9 @@ interpret = function(text, args)
 					value = parseInput(1, { value }, true, false, args.definedScope)
 				end
 				
-				loadstring(path .. "." .. property .. " = " .. value)()
+				pcall(function()
+                    loadstring(path .. "." .. property .. " = " .. value)()
+                end)
 			else
 				throwNew("warning", 32, "")
 			end
@@ -854,7 +860,9 @@ interpret = function(text, args)
 				path = path:gsub('"', "")
 				local cfunc = tokens[3]
 				cfunc = cfunc:gsub('"', "")
-				loadstring(path .. ":" .. cfunc)()
+                pcall(function()
+                    loadstring(path .. ":" .. cfunc)()
+                end)
 			else
 				throwNew("warning", 32, "")
 			end
