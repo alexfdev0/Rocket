@@ -107,7 +107,7 @@ local function checkArgs(expct, tokens)
 	end
 end
 
-local function declareVariable(scope, name, value, immutable)
+local function declareVariable(scope, name, value, immutable, override)
 	scope = tonumber(scope)
 	if not variables[scope] then
 		throwNew("warning", 28, "")
@@ -117,7 +117,7 @@ local function declareVariable(scope, name, value, immutable)
 	for i, variable in pairs(variables[scope]) do
 		if type(variable) == "table" then
 			if name == variable[1] then
-				if variables[scope][i][3] ~= true then
+				if variables[scope][i][3] ~= true or override == true then
 					variables[scope][i][2] = value
 					alreadyassigned = true
 				else
@@ -448,7 +448,7 @@ local function scopeHandle(action, scope, current, silent)
 		variables[sId].inheritance = current
 		getInheritance(variables[sId], variables[sId])
 		table.insert(scopes, scope)
-		declareVariable(sId, "STD_SCOPE_ADDR", sId)
+		declareVariable(sId, "STD_SCOPE_ADDR", sId, true, true)
 		return sId
 	elseif action == "destroy" then
 		for i = 1, #scopes do
@@ -951,7 +951,7 @@ if game then
 	end
 	displayDetails()
 	print("OS: Roblox")
-	declareVariable(0x0, "STD_IS_ROBLOX", true)
+	declareVariable(0x0, "STD_IS_ROBLOX", true, true, true)
 	game.ServerScriptService.Rocket.ExecuteServer.Event:Connect(function(String)
 		cmdline(String)
 	end)
@@ -966,11 +966,11 @@ else
 		local content = file:read("*a")
 		file:close()
 
-		declareVariable(0x0, "STD_FILENAME", filename, true)
+		declareVariable(0x0, "STD_FILENAME", filename, true, true)
 
 		for i, value in ipairs(arg) do
 			if arg[i + 1] then
-				declareVariable(0x0, "STD_ARG" .. tostring(i), arg[i + 1], true)
+				declareVariable(0x0, "STD_ARG" .. tostring(i), arg[i + 1], true, true)
 			end
 		end
 		interpret(content)
