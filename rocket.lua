@@ -1,11 +1,11 @@
 local variables = {
 	[0x0] = { -- Global scope
-		{"STD_SP", " "},
-		{"True", true},
-		{"False", false},
-		{"null", nil},
-		{"STD_SCOPE_ADDR", 0x0},
-		{"STD_IS_ROBLOX", false}
+		{"STD_SP", " ", true},
+		{"True", true, true},
+		{"False", false, true},
+		{"null", nil, true},
+		{"STD_SCOPE_ADDR", 0x0, true},
+		{"STD_IS_ROBLOX", false, true}
 	},
 }
 
@@ -72,6 +72,7 @@ local errors = {
 	[30] = "Failed to get table inheritance tree. No higher scope variables will be auto-referenced.",
 	[31] = "Scope out of range (Must be between 0x001 and 0xfff [12 bit])",
 	[32] = "This function can only be called inside of a Roblox environment",
+	[33] = "Cannot name variable to reserved keyword"
 }
 
 local scopes = {
@@ -106,7 +107,7 @@ local function checkArgs(expct, tokens)
 	end
 end
 
-local function declareVariable(scope, name, value)
+local function declareVariable(scope, name, value, immutable)
 	scope = tonumber(scope)
 	if not variables[scope] then
 		throwNew("warning", 28, "")
@@ -116,13 +117,26 @@ local function declareVariable(scope, name, value)
 	for i, variable in pairs(variables[scope]) do
 		if type(variable) == "table" then
 			if name == variable[1] then
-				variables[scope][i][2] = value
-				alreadyassigned = true
+				if variables[scope][i][3] ~= true then
+					variables[scope][i][2] = value
+					alreadyassigned = true
+				else
+					throwNew("warning", 24, "")
+				end
 			end
 		end
 	end
+	for _, keyword in pairs(validfirstclass) do
+		if name == keyword then
+			throwNew("warning", 33, "")
+		end
+	end
 	if alreadyassigned == false then
-		table.insert(variables[scope], {name, value})
+		local const = false
+		if immutable == true then
+			const = true
+		end
+		table.insert(variables[scope], {name, value, const})
 	end
 end
 
@@ -644,17 +658,13 @@ interpret = function(text, args)
 			local fname = tokens[2]
 			if functions[fname] then
 				local args_ = functions[fname][2]
-				checkArgs(2 + #args, tokens)
 				local scope = scopeHandle("create", nil, args.definedScope)
 				for i, arg in pairs(args_) do
 					local argname = arg
-					declareVariable(scope, argname, parseInput(1, { tokens[i + 2] }, true, false, args.definedScope))
+					declareVariable(scope, argname, parseInput(1, { tokens[i + 2] }, true, false, args.definedScope), false)
 				end
 				functions[fname][2].definedScope = scope
 				interpret(functions[fname][1], functions[fname][2])
-				for i, arg in pairs(args_) do
-					declareVariable(scope, arg, nil)
-				end
 				scopeHandle("destroy", scope)
 			else
 				throwNew("warning", 8, fname)
@@ -956,11 +966,11 @@ else
 		local content = file:read("*a")
 		file:close()
 
-		declareVariable(0x0, "STD_FILENAME", filename)
+		declareVariable(0x0, "STD_FILENAME", filename, true)
 
 		for i, value in ipairs(arg) do
 			if arg[i + 1] then
-				declareVariable(0x0, "STD_ARG" .. tostring(i), arg[i + 1])
+				declareVariable(0x0, "STD_ARG" .. tostring(i), arg[i + 1], true)
 			end
 		end
 		interpret(content)
