@@ -5,7 +5,8 @@ local variables = {
 		{"False", false, true},
 		{"null", nil, true},
 		{"STD_SCOPE_ADDR", 0x0, true},
-		{"STD_IS_ROBLOX", false, true}
+		{"STD_IS_ROBLOX", false, true},
+		{"STD_BKSL", [[\]], true},
 	},
 }
 
@@ -20,10 +21,12 @@ local validfirstclass = {
 	"print",
 	"if",
 	"function",
+	"return",
 	"call",
 	"calc",
 	"for",
 	"wait",
+	"list_all",
 	-- Scope package functions
 	"scope_create",
 	"scope_destroy",
@@ -36,7 +39,9 @@ local validfirstclass = {
 	"create_item",
 	"destroy_item",
 	"edit_property",
-	"instance_call"
+	"instance_call",
+	-- Math package function
+	"random",
 }
 
 local errors = {
@@ -72,7 +77,8 @@ local errors = {
 	[30] = "Failed to get table inheritance tree. No higher scope variables will be auto-referenced.",
 	[31] = "Scope out of range (Must be between 0x001 and 0xfff [12 bit])",
 	[32] = "This function can only be called inside of a Roblox environment",
-	[33] = "Cannot name variable to reserved keyword"
+	[33] = "Cannot name variable to reserved keyword",
+	[34] = "The return keyword cannot be used outside of a function",
 }
 
 local scopes = {
@@ -168,6 +174,8 @@ local function getValueFromVariable(variablename, scope, silent)
 	end
 end
 
+local interpret
+
 local function parseInput(valstart, tokens, checkfor, allowderef, scope)
     --[[
     example: {"y", "=", "1", "+", "1"} (y = 1 in this istance)
@@ -252,9 +260,33 @@ local function parseInput(valstart, tokens, checkfor, allowderef, scope)
 		end
 
 	end
+	
+	-- Check for functions
+	if tokens[valstart] == "call" then
+		local fname = tokens[valstart + 1];
+		local text = ""
+		for i = valstart, #tokens do
+			if i == valstart then
+				text = text .. tokens[i]
+			else
+				text = text .. " " .. tokens[i]
+			end
+		end
+		text = text .. ";" -- Add semioclon at the end to prevent errors
+		interpret(text, {definedScope = scope})
+		local rvalue = getValueFromVariable(fname, scope, true)
+		declareVariable(scope, fname, nil, false, false)
+		return rvalue
+	end
+
 	-- Check for strings
 	if tokens[valstart] ~= "{" then
 		if valstart == #tokens then
+			for i = 1, #tokens do
+				tokens[i] = string.gsub(tokens[i], [[\27]], "\27")
+				tokens[i] = string.gsub(tokens[i], [[\n]], "\n")
+				tokens[i] = string.gsub(tokens[i], [[\r]], "\r")
+			end
 			if string.find(tokens[valstart], '"') then
 				local count = 0
 
@@ -316,6 +348,7 @@ local function parseInput(valstart, tokens, checkfor, allowderef, scope)
 			-- If not then assume it is a string being passed and move it along.
 		end
 	end
+	-- Check for functions
 	-- Check for tables
 	-- Not implemented yet
 end
@@ -459,8 +492,6 @@ local function scopeHandle(action, scope, current, silent)
 		variables[scope] = nil
 	end
 end
-
-local interpret
 
 interpret = function(text, args)
 	if args == nil then
@@ -611,9 +642,12 @@ interpret = function(text, args)
 			local fname = tokens[2]
 			local isend = false
 			local portion = ""
+			local args = {}
+
 			if tokens[#tokens] ~= "end" then
 				throwNew("error", 7, "")
 			end
+
 			if tokens[3] == "do" then
 				for i = 4, #tokens do
 					if tokens[i] ~= "end" then
@@ -624,9 +658,8 @@ interpret = function(text, args)
 						end
 					end
 				end
-				functions[fname] = {portion, {}}
+				functions[fname] = {portion, args}
 			elseif tokens[3] == "args" then
-				local args = {}
 				local doloc
 
 				for i = 4, #tokens do
@@ -654,6 +687,12 @@ interpret = function(text, args)
 			else
 				throwNew("error", 9, "")
 			end
+		elseif name == "return" then
+			if getValueFromVariable("STD_IN_FUNCTION", args.definedScope) == true then
+				declareVariable(tonumber(getValueFromVariable("STD_CALLING", args.definedScope, true)), getValueFromVariable("STD_FUNCTION_NAME", args.definedScope, true), parseInput(2, tokens, true, false, args.definedScope), false, false)
+			else
+				throwNew("error", 34, "")
+			end
 		elseif name == "call" then
 			local fname = tokens[2]
 			if functions[fname] then
@@ -663,6 +702,9 @@ interpret = function(text, args)
 					local argname = arg
 					declareVariable(scope, argname, parseInput(1, { tokens[i + 2] }, true, false, args.definedScope), false)
 				end
+				declareVariable(scope, "STD_IN_FUNCTION", true, true, true)
+				declareVariable(scope, "STD_FUNCTION_NAME", fname, true, true)
+				declareVariable(scope, "STD_CALLING", args.definedScope, true, true)
 				functions[fname][2].definedScope = scope
 				interpret(functions[fname][1], functions[fname][2])
 				scopeHandle("destroy", scope)
@@ -883,6 +925,18 @@ interpret = function(text, args)
 			else
 				throwNew("warning", 32, "")
 			end
+		elseif name == "list_all" then
+			for _, scope in pairs(variables) do
+				for _, variable in pairs(scope) do
+					print("Name: " .. variable[1] .. ", value: " .. tostring(variable[2]) .. ", immutable: " .. tostring(variable[3]))
+				end
+			end
+		elseif name == "random" then
+			local min = parseInput(1, { tokens[2] }, true, false, args.definedScope)
+			local max = parseInput(1, { tokens[3] }, true, false, args.definedScope)
+			local out = math.random(min, max)
+
+			declareVariable(args.definedScope, "rand_out", out)	
 		end
 	end
 
@@ -895,17 +949,13 @@ interpret = function(text, args)
 			if not tokens[3] then
 				throwNew("error", 17, "")
 			end
+			
+			local res = parseInput(valstart, tokens, false, true, args.definedScope)
 
-			if vname == "STD_SP" or vname == "True" or vname == "False" or vname == "null" then
-				throwNew("warning", 24, vname)
+			if args.definedScope then
+				declareVariable(args.definedScope, vname, res)
 			else
-				local res = parseInput(valstart, tokens, false, true, args.definedScope)
-
-				if args.definedScope then
-					declareVariable(args.definedScope, vname, res)
-				else
-					declareVariable(0x0, vname, res)
-				end
+				declareVariable(0x0, vname, res)
 			end
 		end
 	end
