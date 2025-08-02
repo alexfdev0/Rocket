@@ -12,6 +12,7 @@ local variables = {
 }
 
 local functions = {}
+local whileroutines = {}
 
 local validsecondclass = {
 	"=",
@@ -23,9 +24,11 @@ local validfirstclass = {
 	"function",
 	"return",
 	"call",
-	"calc",
 	"for",
 	"require",
+	"while",
+	"wait",
+	"break"
 }
 
 local fcBinds = {}
@@ -64,11 +67,15 @@ local errors = {
 	[31] = "Scope out of range (Must be between 0x001 and 0xfff [12 bit])",
 	[32] = "This function can only be called inside of a Roblox environment",
 	[33] = "Cannot name variable to reserved keyword",
-	[34] = "The return keyword cannot be used outside of a function",
+	[34] = "The Return keyword cannot be used outside of a function",
 	[35] = "This function can only be called outside of a Roblox environment",
 	[36] = "Invalid package",
 	[37] = "Failed to load package",
 	[38] = "Too few arguments",
+	[39] = "While loop missing Do keyword",
+	[40] = "While loop missing End keyword",
+	[41] = "While loop terminated; maximum threads per second exceeded",
+	[42] = "The Break keyword cannot be used outside of a while loop",
 }
 
 local scopes = {
@@ -216,7 +223,7 @@ local function parseInput(valstart, tokens, checkfor, allowderef, scope)
 			end
 		elseif op == "^" then
 			return fnum ^ lnum
-		elseif op == "=" then
+		elseif op == "==" then
 			if fnum == lnum then
 				return true
 			else
@@ -366,77 +373,38 @@ local function parseInput(valstart, tokens, checkfor, allowderef, scope)
 end
 
 local function compare(tokens, condstart, condend, scope)
-	local format = 0
-	if tokens[condstart + 1] == "=" then
-		format = 1
-	else
-		format = 2
-	end
-	if format == 1 then
-		local firsttokens = {}
-		local secondtokens = {}
-		local equalloc = 0
+	local exptokens = {}
+	local restokens = {}
+	local equalloc = 0
+	local reverse = false
 
-		for i = condstart, #tokens do
-			if tokens[i] == "=" or tokens[i] == "!=" then
-				equalloc = i
-				break
-			else
-				table.insert(firsttokens, tokens[i])
+	for i = condstart, #tokens do
+		if tokens[i] == "==" or tokens[i] == "!=" then
+			equalloc = i
+			if tokens[i] == "!=" then
+				reverse = true
 			end
-		end
-
-		local firstres = parseInput(1, firsttokens, true, false, scope)
-
-		if equalloc == 0 then
-			throwNew("error", 18, "")
-		end
-
-		for i = equalloc + 1, condend do
-			table.insert(secondtokens, tokens[i])
-		end
-
-		local secondres = parseInput(1, secondtokens, true, false, scope)
-
-		if firstres == secondres then
-			return true
+			break
 		else
-			return false
-		end
-	else
-		local f = tokens[condstart]
-
-		local restokens = {}
-		local exptokens = {}
-		local equalloc = 0
-		local thenloc = condend + 1
-
-		for i = condstart, #tokens do
-			if tokens[i] == "=" or tokens[i] == "!=" then
-				equalloc = i
-				break
-			else
-				table.insert(restokens, tokens[i])
-			end
-		end
-
-		local first = parseInput(1, restokens, true, false, scope)
-
-		if equalloc == 0 then
-			throwNew("error", 18, "")
-		end
-
-		for i = equalloc + 1, condend do
 			table.insert(exptokens, tokens[i])
 		end
+	end
 
-		local second = parseInput(1, exptokens, true, false, scope)
+	if equalloc == 0 then
+		throwNew("error", 18, "")
+	end
 
-		if first == second then
-			return true
-		else
-			return false
-		end
+	for i = equalloc + 1, condend do
+		table.insert(restokens, tokens[i])
+	end
+
+	local expres = parseInput(1, exptokens, true, false, scope)
+	local resres = parseInput(1, restokens, true, false, scope)
+
+	if reverse then
+		return expres ~= resres
+	else
+		return expres == resres
 	end
 end
 
@@ -524,6 +492,28 @@ local function registerError(body)
 	end
 end
 
+local function sleep(time_)
+	if not tonumber(time_) then return end
+	time_ = tonumber(time_)
+	if getValueFromVariable("STD_IS_ROBLOX") == false then
+		if getValueFromVariable("STD_IS_NTFS") == false then
+			os.execute("sleep " .. tostring(time_))
+		else
+			os.execute("timeout /t " .. tostring(time_) .. " >nul")
+		end
+	else
+		wait(time_)
+	end
+end
+
+table.find = function(haystack, needle)
+	for index, value in pairs(haystack) do
+		if value == needle then
+			return index
+		end
+	end
+end
+
 interpret = function(text, args)
 	if args == nil then
 		args = {}
@@ -548,15 +538,11 @@ interpret = function(text, args)
 
 	local splitloc = 0
 
-	if tokens[1] == "//" then
-		return
-	end
-
-	if tokens[1] == "if" or tokens[1] == "function" or tokens[1] == "for" then
+	if tokens[1] == "if" or tokens[1] == "function" or tokens[1] == "for" or tokens[1] == "while" then
 		local depth = 0
 
 		for i = 1, #tokens do
-			if tokens[i] == "function" or tokens[i] == "if" or tokens[i] == "for" then
+			if tokens[i] == "function" or tokens[i] == "if" or tokens[i] == "for" or tokens[i] == "while" then
 				depth = depth + 1
 			elseif tokens[i] == "end;" then
 				depth = depth - 1
@@ -611,10 +597,76 @@ interpret = function(text, args)
 	-- Func handler
 	if func == true then
 		local name = tokens[1]
-		if name == "print" then
-			local res = parseInput(2, tokens, true, false, args.definedScope)
-			if res then
-				print(res)
+		if name == "while" then
+			local doloc = 0
+			local endloc = 0
+
+			for i = 2, #tokens do
+				if tokens[i] == "do" then
+					doloc = i
+					break
+				end
+			end
+
+			if doloc == 0 then
+				throwNew("error", 39, "")
+			end
+
+			local bodytokens = {}
+			for i = doloc + 1, #tokens do
+				if tokens[i] == "end" then
+					endloc = i
+					break
+				else
+					table.insert(bodytokens, tokens[i])
+				end
+			end
+
+			if endloc == 0 then
+				throwNew("error", 40, "")
+			end
+
+			local toexec = table.concat(bodytokens, " ")
+
+			local max_iter = 10000 -- How many per 0.1 seconds
+			local iter = 0
+
+			local watcher = {coroutine.create(function(owner)
+				while sleep(0.1) do
+					whileroutines[owner][2] = 0
+					if whileroutines[owner][3] == false then
+						break
+					end
+				end
+				return
+			end), iter, true}
+
+			table.insert(whileroutines, watcher)
+			local owner = table.find(whileroutines, watcher)
+
+			local scope = scopeHandle("create", nil, args.definedScope, true)
+			declareVariable(scope, "STD_IN_WHILE_LOOP", true, true, true)
+			declareVariable(scope, "STD_CONTINUE", true, true, true)
+			coroutine.resume(whileroutines[owner][1], owner)
+			while compare(tokens, 2, doloc - 1, args.definedScope) == true do
+				interpret(toexec, {definedScope = scope})
+				whileroutines[owner][2] = whileroutines[owner][2] + 1
+				if whileroutines[owner][2] >= max_iter then
+					throwNew("warning", 41, "")
+					break
+				end
+				if getValueFromVariable("STD_CONTINUE", scope) ~= true then
+					break
+				end
+			end
+			whileroutines[owner][3] = false
+			table.remove(whileroutines, owner)
+			scopeHandle("destroy", scope)
+		elseif name == "break" then
+			if getValueFromVariable("STD_IN_WHILE_LOOP", args.definedScope, true) == true then
+				declareVariable(args.definedScope, "STD_CONTINUE", false, true, true)
+			else
+				throwNew("error", 42, "")
 			end
 		elseif name == "if" then
 			-- if statement handling
@@ -821,14 +873,7 @@ interpret = function(text, args)
 			if getValueFromVariable("STD_IS_ROBLOX") == true then
 				wait(ttw)
 			else
-				local ntime = os.time() + ttw
-				repeat until os.time() > ntime
-			end
-		elseif name == "list_all" then
-			for scope_, scope in pairs(variables) do
-				for _, variable in pairs(scope) do
-					print("Name: " .. variable[1] .. ", value: " .. tostring(variable[2]) .. ", immutable: " .. tostring(variable[3]) .. ", scope: " .. tostring(scope_))
-				end
+				sleep(ttw)
 			end
 		elseif name == "require" then
 			local name = parseInput(1, { tokens[2] }, true, false, args.definedScope)
