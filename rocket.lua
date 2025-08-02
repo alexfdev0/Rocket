@@ -970,7 +970,7 @@ local function displayDetails()
 	print("Copyright (c) 2025 Alexander Flax")
 end
 
-if ENV_ROBLOX == true then
+if _G.ENV_ROBLOX == true then
 	-- Roblox environment
 	cmdline = function(String)
 		interpret(String)
@@ -978,7 +978,7 @@ if ENV_ROBLOX == true then
 	displayDetails()
 	print("OS: Roblox")
 	declareVariable(0x0, "STD_IS_ROBLOX", true, true, true)
-	RBLX_EVENT.Event:Connect(function(String)
+	_G.RBLX_EVENT.Event:Connect(function(String)
 		cmdline(String)
 	end)
 else
