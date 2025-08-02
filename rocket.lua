@@ -857,7 +857,7 @@ interpret = function(text, args)
 				local package_name = string.gsub(name, ".lua", "")
 				package_ = require(package_name)
 			else
-				local module_obj = assert(loadstring("return " .. name), "Provided module is nil")
+				local module_obj = assert(loadstring("return " .. name)(), "Provided module is nil")
 				package_ = require(module_obj)
 			end
 
