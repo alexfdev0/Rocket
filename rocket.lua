@@ -26,14 +26,9 @@ local validfirstclass = {
 	"calc",
 	"for",
 	"require",
-	-- Scope package functions
+	-- Basic scope functions; rest are in scope package
 	"scope_create",
 	"scope_destroy",
-	"scope_add",
-	"scope_remove",
-	"scope_get",
-	"scope_transfer",
-	"scope_list",
 	-- Roblox reserved functions
 	"create_item",
 	"destroy_item",
@@ -828,52 +823,6 @@ interpret = function(text, args)
 					exec(i, scope)
 				end
 				scopeHandle("destroy", scope)
-			end
-		elseif name == "scope_create" then
-			local addr = parseInput(2, tokens, true, false, args.definedScope)
-			scopeHandle("create", addr, 0x0, true)
-		elseif name == "scope_destroy" then
-			local addr = parseInput(2, tokens, true, false, args.definedScope)
-			scopeHandle("destroy", addr, nil)
-		elseif name == "scope_add" then
-			local addr = parseInput(1, { tokens[2] }, true, false, args.definedScope)
-			local vname = tokens[3]
-			declareVariable(addr, vname, parseInput(4, tokens, true, false, args.definedScope))
-		elseif name == "scope_remove" then
-			local addr = parseInput(1, { tokens[2] }, true, false, args.definedScope)
-			local vname = tokens[3]
-			declareVariable(addr, vname, nil)
-		elseif name == "scope_get" then
-			local addr = parseInput(1, { tokens[2] }, true, false, args.definedScope)
-			local vname = tokens[3]
-			local value = getValueFromVariable(vname, addr)
-			print(value)
-		elseif name == "scope_transfer" then
-			local addrfrom = parseInput(1, { tokens[2] }, true, false, args.definedScope)
-			local addrto = parseInput(1, { tokens[3] }, true, false, args.definedScope)
-			local vname = tokens[4]
-			local vvalue
-			if variables[addrfrom] then
-				if variables[addrto] then
-					for _, variable in pairs(variables[addrfrom]) do
-						if type(variable) == "table" then
-							local name = variable[1]
-							local value = variable[2]
-							if name == vname then
-								vvalue = value
-							end
-						end
-					end
-				else
-					throwNew("warning", 29, "")
-				end
-			else
-				throwNew("warning", 29, "")
-			end
-			declareVariable(addrto, vname, vvalue)
-		elseif name == "scope_list" then
-			for _, scope in pairs(scopes) do
-				print("0x" .. string.lower(string.format("%X", scope)))
 			end
 		elseif name == "wait" then
 			local ttw = parseInput(1, { tokens[2] }, true, false, args.definedScope)
