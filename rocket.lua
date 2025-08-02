@@ -688,7 +688,7 @@ interpret = function(text, args)
 				throwNew("error", 9, "")
 			end
 		elseif name == "return" then
-			if getValueFromVariable("STD_IN_FUNCTION", args.definedScope) == true then
+			if getValueFromVariable("STD_IN_FUNCTION", args.definedScope, true) == true then
 				declareVariable(tonumber(getValueFromVariable("STD_CALLING", args.definedScope, true)), getValueFromVariable("STD_FUNCTION_NAME", args.definedScope, true), parseInput(2, tokens, true, false, args.definedScope), false, false)
 			else
 				throwNew("error", 34, "")
@@ -699,6 +699,7 @@ interpret = function(text, args)
 				local args_ = functions[fname][2]
 				local scope = scopeHandle("create", nil, args.definedScope)
 				for i, arg in pairs(args_) do
+					print(i)
 					local argname = arg
 					declareVariable(scope, argname, parseInput(1, { tokens[i + 2] }, true, false, args.definedScope), false)
 				end

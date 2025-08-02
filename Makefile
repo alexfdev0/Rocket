@@ -13,13 +13,13 @@ EXECUTABLE_MAC=/usr/local/bin/rocket
 unix: $(SRC)/rocket.lua
 	sudo mkdir -p $(INSTALL_DIR)
 	sudo $(LUAC) -o $(INSTALL_DIR)/rocket.out $(SRC)/rocket.lua
-	echo -e '#!/bin/sh\nexec lua $(INSTALL_DIR)/rocket.out "$$@"' | sudo tee $(EXECUTABLE) > /dev/null
+	printf '#!/bin/sh\nexec lua $(INSTALL_DIR)/rocket.out "$$@"' | sudo tee $(EXECUTABLE) > /dev/null
 	sudo chmod +x $(EXECUTABLE)
 
 mac: $(SRC)/rocket.lua
 	sudo mkdir -p $(INSTALL_DIR_MAC)
 	sudo $(LUAC) -o $(INSTALL_DIR_MAC)/rocket.out $(SRC)/rocket.lua
-	echo -e '#!/bin/sh\nexec lua $(INSTALL_DIR_MAC)/rocket.out "$$@"' | sudo tee $(EXECUTABLE_MA) > /dev/null
+	printf '#!/bin/sh\nexec lua $(INSTALL_DIR_MAC)/rocket.out "$$@"' | sudo tee $(EXECUTABLE_MAC) > /dev/null
 	sudo chmod +x $(EXECUTABLE_MAC)
 	
 clean:
