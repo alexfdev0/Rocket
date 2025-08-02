@@ -506,7 +506,7 @@ local function sleep(time_)
 	end
 end
 
-table_find = function(haystack, needle)
+local function table_find(haystack, needle)
 	for index, value in pairs(haystack) do
 		if value == needle then
 			return index
