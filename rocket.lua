@@ -7,6 +7,7 @@ local variables = {
 		{"STD_SCOPE_ADDR", 0x0, true},
 		{"STD_IS_ROBLOX", false, true},
 		{"STD_BKSL", [[\]], true},
+		{"STD_IS_NTFS", false, true},
 	},
 }
 
@@ -18,15 +19,13 @@ local validsecondclass = {
 
 local validfirstclass = {
 	-- General purpose functions
-	"print",
 	"if",
 	"function",
 	"return",
 	"call",
 	"calc",
 	"for",
-	"wait",
-	"list_all",
+	"require",
 	-- Scope package functions
 	"scope_create",
 	"scope_destroy",
@@ -40,13 +39,13 @@ local validfirstclass = {
 	"destroy_item",
 	"edit_property",
 	"instance_call",
-	-- Math package function
-	"random",
 }
+
+local fcBinds = {}
 
 local errors = {
 	[1] = "Unknown argument(s)",
-	[2] = "Unknown instruction",
+	[2] = "Unknown global function",
 	[3] = "If statement is not followed by Then after condition",
 	[4] = "If statement is not closed by an End after function if then",
 	[5] = "Equal operator not preceeded by variable name",
@@ -79,6 +78,10 @@ local errors = {
 	[32] = "This function can only be called inside of a Roblox environment",
 	[33] = "Cannot name variable to reserved keyword",
 	[34] = "The return keyword cannot be used outside of a function",
+	[35] = "This function can only be called outside of a Roblox environment",
+	[36] = "Invalid package",
+	[37] = "Failed to load package",
+	[38] = "Too few arguments",
 }
 
 local scopes = {
@@ -110,7 +113,12 @@ local function checkArgs(expct, tokens)
 			end
 		end
 		throwNew("warning", 1, extras)
+		return false
+	elseif #tokens < expct then
+		throwNew("warning", 38, "")
+		return false
 	end
+	return true
 end
 
 local function declareVariable(scope, name, value, immutable, override)
@@ -169,7 +177,28 @@ local function getValueFromVariable(variablename, scope, silent)
 		return nil
 	end
 	if found == false then
-		throwNew("warning", 16, "'" .. variablename .. "'")
+		-- Updated for lazy loading of variables
+		local inheritance = variables[scope].inheritance
+		local current = inheritance
+		local value = nil
+		
+		while current do
+			local found = nil
+			for _, variable in pairs(variables[current]) do
+				if variable[1] == variablename then
+					found = variable[2]
+					break
+				end
+			end
+			if found ~= nil then
+				return found
+			end
+			current = variables[current].inheritance
+		end
+
+		if silent ~= true then
+			throwNew("warning", 16, "'" .. variablename .. "'")
+		end
 		return nil
 	end
 end
@@ -262,31 +291,30 @@ local function parseInput(valstart, tokens, checkfor, allowderef, scope)
 	end
 	
 	-- Check for functions
-	if tokens[valstart] == "call" then
-		local fname = tokens[valstart + 1];
-		local text = ""
-		for i = valstart, #tokens do
-			if i == valstart then
-				text = text .. tokens[i]
-			else
-				text = text .. " " .. tokens[i]
+	for _, keyword in pairs(validfirstclass) do
+		if tokens[valstart] == keyword then
+			local text = ""
+			for i = valstart, #tokens do
+				if i == valstart then
+					text = text .. tokens[i]
+				else
+					text = text .. " " .. tokens[i]
+				end
 			end
+			text = text .. ";"
+			local values = interpret(text, {definedScope = scope, returnReturnValue = true})
+			return values.returnValue
 		end
-		text = text .. ";" -- Add semioclon at the end to prevent errors
-		interpret(text, {definedScope = scope})
-		local rvalue = getValueFromVariable(fname, scope, true)
-		declareVariable(scope, fname, nil, false, false)
-		return rvalue
 	end
 
 	-- Check for strings
 	if tokens[valstart] ~= "{" then
+		for i = 1, #tokens do
+			tokens[i] = string.gsub(tokens[i], [[\27]], "\27")
+			tokens[i] = string.gsub(tokens[i], [[\n]], "\n")
+			tokens[i] = string.gsub(tokens[i], [[\r]], "\r")
+		end
 		if valstart == #tokens then
-			for i = 1, #tokens do
-				tokens[i] = string.gsub(tokens[i], [[\27]], "\27")
-				tokens[i] = string.gsub(tokens[i], [[\n]], "\n")
-				tokens[i] = string.gsub(tokens[i], [[\r]], "\r")
-			end
 			if string.find(tokens[valstart], '"') then
 				local count = 0
 
@@ -348,9 +376,6 @@ local function parseInput(valstart, tokens, checkfor, allowderef, scope)
 			-- If not then assume it is a string being passed and move it along.
 		end
 	end
-	-- Check for functions
-	-- Check for tables
-	-- Not implemented yet
 end
 
 local function compare(tokens, condstart, condend, scope)
@@ -479,7 +504,7 @@ local function scopeHandle(action, scope, current, silent)
 			variables[sId] = {}
 		end
 		variables[sId].inheritance = current
-		getInheritance(variables[sId], variables[sId])
+		-- getInheritance(variables[sId], variables[sId]) use lazy loading instead
 		table.insert(scopes, scope)
 		declareVariable(sId, "STD_SCOPE_ADDR", sId, true, true)
 		return sId
@@ -490,6 +515,25 @@ local function scopeHandle(action, scope, current, silent)
 			end
 		end
 		variables[scope] = nil
+	end
+end
+
+local function checkFile(filename)
+	local file = io.open(filename, 'r')
+	if file then
+		file:close()
+		return true
+	else
+		return false
+	end
+end
+
+local function registerError(body)
+	table.insert(errors, body)
+	for i = 1, #errors do
+		if errors[i] == body then
+			return i
+		end
 	end
 end
 
@@ -689,7 +733,8 @@ interpret = function(text, args)
 			end
 		elseif name == "return" then
 			if getValueFromVariable("STD_IN_FUNCTION", args.definedScope, true) == true then
-				declareVariable(tonumber(getValueFromVariable("STD_CALLING", args.definedScope, true)), getValueFromVariable("STD_FUNCTION_NAME", args.definedScope, true), parseInput(2, tokens, true, false, args.definedScope), false, false)
+				local toReturn = parseInput(2, tokens, true, false, args.definedScope)
+				args.returnValue = toReturn
 			else
 				throwNew("error", 34, "")
 			end
@@ -707,43 +752,11 @@ interpret = function(text, args)
 				declareVariable(scope, "STD_FUNCTION_NAME", fname, true, true)
 				declareVariable(scope, "STD_CALLING", args.definedScope, true, true)
 				functions[fname][2].definedScope = scope
-				interpret(functions[fname][1], functions[fname][2])
+				local result = interpret(functions[fname][1], functions[fname][2])
 				scopeHandle("destroy", scope)
+				args.returnValue = result.returnValue
 			else
 				throwNew("warning", 8, fname)
-			end
-		elseif name == "calc" then
-			local fnum = tokens[2]
-			local op = tokens[3]
-			local lnum = tokens[4]
-			fnum = tonumber(fnum)
-			lnum = tonumber(lnum)
-			if fnum == nil or lnum == nil then
-				throwNew("error", 12, "")
-			end
-
-			if op ~= "+" and op ~= "-" and op ~= "*" and op ~= "/" then
-				throwNew("error", 13, "")
-			end
-
-			local res = "n/a"
-
-			if lnum == 0 and op == "/" then
-				throwNew("warning", 14, "")
-			else
-				if op == "+" then
-					res = fnum + lnum
-				elseif op == "-" then
-					res = fnum - lnum
-				elseif op == "*" then
-					res = fnum * lnum
-				elseif op == "/" then
-					res = fnum / lnum
-				end
-			end
-
-			if res ~= "n/a" then
-				print(res)
 			end
 		elseif name == "for" then
             --[[
@@ -927,21 +940,82 @@ interpret = function(text, args)
 				throwNew("warning", 32, "")
 			end
 		elseif name == "list_all" then
-			for _, scope in pairs(variables) do
+			for scope_, scope in pairs(variables) do
 				for _, variable in pairs(scope) do
-					print("Name: " .. variable[1] .. ", value: " .. tostring(variable[2]) .. ", immutable: " .. tostring(variable[3]))
+					print("Name: " .. variable[1] .. ", value: " .. tostring(variable[2]) .. ", immutable: " .. tostring(variable[3]) .. ", scope: " .. tostring(scope_))
 				end
 			end
-		elseif name == "random" then
-			local min = parseInput(1, { tokens[2] }, true, false, args.definedScope)
-			local max = parseInput(1, { tokens[3] }, true, false, args.definedScope)
-			local out = math.random(min, max)
+		elseif name == "require" then
+			local name = parseInput(1, { tokens[2] }, true, false, args.definedScope)
+			local package_ = nil
 
-			declareVariable(args.definedScope, "rand_out", out)	
+			if getValueFromVariable("STD_IS_ROBLOX") == false then
+				local found = checkFile(name)
+				
+				if found == false then
+					if getValueFromVariable("STD_IS_NTFS") == false then
+						package.path = "/usr/bin/rocketlang/?.lua;/usr/local/bin/rocketlang/?.lua;" .. package.path
+						found = checkFile("/usr/bin/rocketlang/" .. name)
+						if found == false then
+							found = checkFile("/usr/local/bin/rocketlang/" .. name)
+						end
+					else
+						package.path = "C:\\rocket\\?.lua;" .. package.path
+						found = checkFile("C:\\rocket\\" .. name)
+					end
+				end
+
+				if found == false then
+					throwNew("error", 11, name)
+				end
+
+				local package_name = string.gsub(name, ".lua", "")
+				package_ = require(package_name)
+			else
+				package_ = require(name)
+			end
+
+			if (not package_.bundle) then
+				throwNew("error", 36, name)
+			end
+
+			for i = 1, #package_.bundle do
+				local pack = package_.bundle[i]
+				table.insert(validfirstclass, pack.name)
+				table.insert(fcBinds, {pack.name, pack})
+			end
+		else
+			local package_ = nil
+			for i = 1, #fcBinds do
+				if fcBinds[i][1] == name then
+					package_ = fcBinds[i][2]
+					break
+				end
+			end
+			if package_ == nil then
+				throwNew("error", 37, name)
+			end
+			local result = package_.func({
+				tokens = tokens,
+				args = args,
+				variables = variables,
+				scopes = scopes,
+				throwNew = throwNew, 
+				checkArgs = checkArgs,
+				declareVariable = declareVariable,
+				getValueFromVariable = getValueFromVariable,
+				interpret = interpret,
+				parseInput = parseInput,
+				compare = compare,
+				scopeHandle = scopeHandle,
+				checkFile = checkFile,
+				registerError = registerError,
+			}) or args
+			args = result
 		end
 	end
 
-	-- Decleration handler
+	-- Declaration handler
 	if vdec == true then
 		if tokens[2] == "=" then
 			local vname = tokens[1]
@@ -964,16 +1038,32 @@ interpret = function(text, args)
 	-- Pass otherf stuff to next thread
 
 	if #otherf > 0 then
-		local str = ""
-		for i = 1, #otherf do
-			if i == 1 then
-				str = str .. otherf[i]
-			else
-				str = str .. " " .. otherf[i]
+		local str = table.concat(otherf, " ")
+
+		if args.ignoreOtherf == true then
+			local sendBack = {}
+			for name, value in pairs(args) do
+				if name ~= "definedScope" and name ~= "ignoreOtherf" then
+					table.insert(sendBack, {name, value})
+				end
+			end
+			return {str, sendBack}
+		else
+			local sendArgs = args
+			sendArgs.ignoreOtherf = true
+			local next_ = str
+			while next_ ~= nil do
+				next_ = interpret(next_, sendArgs)
+				for _, argument in pairs(next_[2]) do
+					args[argument[1]] = argument[2]
+				end
+				next_ = next_[1]
 			end
 		end
-
-		interpret(str, {definedScope = args.definedScope})
+	else
+		if args.ignoreOtherf ~= true then
+			return args
+		end
 	end
 end
 
@@ -1030,6 +1120,7 @@ else
 		local OS = os.getenv("OS")
 		if OS == "Windows_NT" then
 			print("OS: Windows NT (Win32)")
+			declareVariable(0x0, "STD_IS_NTFS", true, true, true)
 		elseif os.execute("uname -s > /dev/null") then
 			local handle = io.popen("uname -s")
 			local result = handle:read("*a")
