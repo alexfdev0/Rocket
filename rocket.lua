@@ -26,14 +26,6 @@ local validfirstclass = {
 	"calc",
 	"for",
 	"require",
-	-- Basic scope functions; rest are in scope package
-	"scope_create",
-	"scope_destroy",
-	-- Roblox reserved functions
-	"create_item",
-	"destroy_item",
-	"edit_property",
-	"instance_call",
 }
 
 local fcBinds = {}
@@ -826,67 +818,11 @@ interpret = function(text, args)
 			end
 		elseif name == "wait" then
 			local ttw = parseInput(1, { tokens[2] }, true, false, args.definedScope)
-			if getValueFromVariable("STD_IS_ROBLOX", 0x0) == true then
+			if getValueFromVariable("STD_IS_ROBLOX") == true then
 				wait(ttw)
 			else
 				local ntime = os.time() + ttw
 				repeat until os.time() > ntime
-			end
-		elseif name == "create_item" then
-			if getValueFromVariable("STD_IS_ROBLOX") == true then
-				local name = parseInput(1, { tokens[2] }, true, false, args.definedScope)
-				local _type = parseInput(1, { tokens[3] }, true, false, args.definedScope)
-				pcall(function() 
-                    local New = Instance.new(_type)
-                    New.Name = name
-                    New.Parent = workspace
-                end)
-			else
-				throwNew("warning", 32, "")
-			end
-		elseif name == "destroy_item" then
-			if getValueFromVariable("STD_IS_ROBLOX") == true then
-				
-				local path = tokens[2]
-				path = path:gsub('"', "")
-				pcall(function()
-                    loadstring(path .. ":Destroy()")()
-                end)
-			else
-				throwNew("warning", 32, "")
-			end
-		elseif name == "edit_property" then
-			if getValueFromVariable("STD_IS_ROBLOX") == true then
-				local path = tokens[2]
-				path = path:gsub('"', "")
-				local property = tokens[3]
-				property = property:gsub('"', "")
-				local value = tokens[4]
-				if not tonumber(value) then
-					if not string.find(value, ".") then
-						value = parseInput(1, { value }, true, false, args.definedScope)
-					end
-				else
-					value = parseInput(1, { value }, true, false, args.definedScope)
-				end
-				
-				pcall(function()
-                    loadstring(path .. "." .. property .. " = " .. value)()
-                end)
-			else
-				throwNew("warning", 32, "")
-			end
-		elseif name == "instance_call" then
-			if getValueFromVariable("STD_IS_ROBLOX") == true then
-				local path = tokens[2]
-				path = path:gsub('"', "")
-				local cfunc = tokens[3]
-				cfunc = cfunc:gsub('"', "")
-                pcall(function()
-                    loadstring(path .. ":" .. cfunc)()
-                end)
-			else
-				throwNew("warning", 32, "")
 			end
 		elseif name == "list_all" then
 			for scope_, scope in pairs(variables) do
@@ -1034,7 +970,7 @@ local function displayDetails()
 	print("Copyright (c) 2025 Alexander Flax")
 end
 
-if game then
+if ENV_ROBLOX == true then
 	-- Roblox environment
 	cmdline = function(String)
 		interpret(String)
@@ -1042,7 +978,7 @@ if game then
 	displayDetails()
 	print("OS: Roblox")
 	declareVariable(0x0, "STD_IS_ROBLOX", true, true, true)
-	game.ServerScriptService.Rocket.ExecuteServer.Event:Connect(function(String)
+	RBLX_EVENT.Event:Connect(function(String)
 		cmdline(String)
 	end)
 else
