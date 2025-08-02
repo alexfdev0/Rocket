@@ -506,7 +506,7 @@ local function sleep(time_)
 	end
 end
 
-table.find_ = function(haystack, needle)
+table_find = function(haystack, needle)
 	for index, value in pairs(haystack) do
 		if value == needle then
 			return index
@@ -642,7 +642,7 @@ interpret = function(text, args)
 			end), iter, true}
 
 			table.insert(whileroutines, watcher)
-			local owner = table.find_(whileroutines, watcher)
+			local owner = table_find(whileroutines, watcher)
 
 			local scope = scopeHandle("create", nil, args.definedScope, true)
 			declareVariable(scope, "STD_IN_WHILE_LOOP", true, true, true)
