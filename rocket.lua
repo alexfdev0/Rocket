@@ -940,10 +940,12 @@ interpret = function(text, args)
 			local next_ = str
 			while next_ ~= nil do
 				next_ = interpret(next_, sendArgs)
-				for _, argument in pairs(next_[2]) do
-					args[argument[1]] = argument[2]
+				if next_ ~= nil then
+					for _, argument in pairs(next_[2]) do
+						args[argument[1]] = argument[2]
+					end
+					next_ = next_[1]
 				end
-				next_ = next_[1]
 			end
 		end
 	else
