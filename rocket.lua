@@ -16,6 +16,7 @@ local whileroutines = {}
 
 local validsecondclass = {
 	"=",
+	"=!",
 }
 
 local validfirstclass = {
@@ -115,39 +116,6 @@ local function checkArgs(expct, tokens)
 	return true
 end
 
-local function declareVariable(scope, name, value, immutable, override)
-	scope = tonumber(scope)
-	if not variables[scope] then
-		throwNew("warning", 28, "")
-		return
-	end
-	local alreadyassigned = false
-	for i, variable in pairs(variables[scope]) do
-		if type(variable) == "table" then
-			if name == variable[1] then
-				if variables[scope][i][3] ~= true or override == true then
-					variables[scope][i][2] = value
-					alreadyassigned = true
-				else
-					throwNew("warning", 24, "")
-				end
-			end
-		end
-	end
-	for _, keyword in pairs(validfirstclass) do
-		if name == keyword then
-			throwNew("warning", 33, "")
-		end
-	end
-	if alreadyassigned == false then
-		local const = false
-		if immutable == true then
-			const = true
-		end
-		table.insert(variables[scope], {name, value, const})
-	end
-end
-
 local function getValueFromVariable(variablename, scope, silent)
 	local found = false
 	if scope == nil then
@@ -194,6 +162,59 @@ local function getValueFromVariable(variablename, scope, silent)
 			throwNew("warning", 16, "'" .. variablename .. "'")
 		end
 		return nil
+	end
+end
+
+local function declareVariable(scope, name, value, immutable, override, retroactive)
+	local function setRetroactive(startscope)
+		local inheritance = startscope or nil
+		if inheritance ~= nil then
+			local last = inheritance
+			while last ~= nil do
+				if getValueFromVariable(name, last, true) ~= nil then
+					declareVariable(last, name, value, immutable, override, false)
+					last = variables[last].inheritance or nil
+				end
+			end
+		end
+	end
+	if retroactive == nil then retroactive = false end
+	scope = tonumber(scope)
+	if not variables[scope] then
+		throwNew("warning", 28, "")
+		return
+	end
+	local alreadyassigned = false
+	for i, variable in pairs(variables[scope]) do
+		if type(variable) == "table" then
+			if name == variable[1] then
+				if variables[scope][i][3] ~= true or override == true then
+					if retroactive == false then
+						variables[scope][i][2] = value
+						alreadyassigned = true
+					else
+						setRetroactive(scope)
+					end
+				else
+					throwNew("warning", 24, "")
+				end
+			end
+		end
+	end
+	for _, keyword in pairs(validfirstclass) do
+		if name == keyword then
+			throwNew("warning", 33, "")
+		end
+	end
+	if alreadyassigned == false then
+		local const = false
+		if immutable == true then
+			const = true
+		end
+		table.insert(variables[scope], {name, value, const})
+		if retroactive == true then
+			setRetroactive(scope)
+		end
 	end
 end
 
@@ -438,17 +459,6 @@ local function scopeHandle(action, scope, current, silent)
 			end
 		end
 
-		local getInheritance
-		getInheritance = function(child, modify)
-			if child.inheritance ~= nil then
-				for _, pair in pairs(variables[child.inheritance]) do
-					if type(pair) == "table" then
-						table.insert(modify, pair)
-					end
-				end
-				getInheritance(variables[child.inheritance], modify)
-			end
-		end
 		local sId = 0
 		if tonumber(scope) then
 			sId = tonumber(scope)
@@ -459,7 +469,6 @@ local function scopeHandle(action, scope, current, silent)
 			variables[sId] = {}
 		end
 		variables[sId].inheritance = current
-		-- getInheritance(variables[sId], variables[sId]) use lazy loading instead
 		table.insert(scopes, scope)
 		declareVariable(sId, "STD_SCOPE_ADDR", sId, true, true)
 		return sId
@@ -783,7 +792,6 @@ interpret = function(text, args)
 				local args_ = functions[fname][2]
 				local scope = scopeHandle("create", nil, args.definedScope)
 				for i, arg in pairs(args_) do
-					print(i)
 					local argname = arg
 					declareVariable(scope, argname, parseInput(1, { tokens[i + 2] }, true, false, args.definedScope), false)
 				end
@@ -793,7 +801,9 @@ interpret = function(text, args)
 				functions[fname][2].definedScope = scope
 				local result = interpret(functions[fname][1], functions[fname][2])
 				scopeHandle("destroy", scope)
-				args.returnValue = result.returnValue
+				if result ~= nil then
+					args.returnValue = result.returnValue
+				end
 			else
 				throwNew("warning", 8, fname)
 			end
@@ -884,13 +894,11 @@ interpret = function(text, args)
 				
 				if found == false then
 					if getValueFromVariable("STD_IS_NTFS") == false then
-						package.path = "/usr/bin/rocketlang/?.lua;/usr/local/bin/rocketlang/?.lua;" .. package.path
 						found = checkFile("/usr/bin/rocketlang/" .. name)
 						if found == false then
 							found = checkFile("/usr/local/bin/rocketlang/" .. name)
 						end
 					else
-						package.path = "C:\\rocket\\?.lua;" .. package.path
 						found = checkFile("C:\\rocket\\" .. name)
 					end
 				end
@@ -948,7 +956,12 @@ interpret = function(text, args)
 
 	-- Declaration handler
 	if vdec == true then
-		if tokens[2] == "=" then
+		if tokens[2] == "=" or tokens[2] == "=!" then
+			local retroactive = false
+			if tokens[2] == "=!" then
+				retroactive = true
+			end
+
 			local vname = tokens[1]
 			local valstart = 3
 
@@ -959,9 +972,9 @@ interpret = function(text, args)
 			local res = parseInput(valstart, tokens, false, true, args.definedScope)
 
 			if args.definedScope then
-				declareVariable(args.definedScope, vname, res)
+				declareVariable(args.definedScope, vname, res, false, false, retroactive)
 			else
-				declareVariable(0x0, vname, res)
+				declareVariable(0x0, vname, res, false, false, retroactive)
 			end
 		end
 	end
@@ -1011,7 +1024,7 @@ cmdline = function()
 end
 
 local function displayDetails()
-	print("Rocket v3.0")
+	print("Rocket v4.0")
 	print("Find out more at rocket.alexflax.xyz")
 	print("Made by alexfdev0 at github.com/alexfdev0")
 	print("Licensed under GNU GPL 3.0")
@@ -1052,14 +1065,17 @@ else
 		displayDetails()
 		local OS = os.getenv("OS")
 		if OS == "Windows_NT" then
+			package.path = "C:\\rocket\\?.lua;" .. package.path
 			print("OS: Windows NT (Win32)")
 			declareVariable(0x0, "STD_IS_NTFS", true, true, true)
 		elseif os.execute("uname -s > /dev/null") then
+			package.path = "/usr/bin/rocketlang/?.lua;/usr/local/bin/rocketlang/?.lua;" .. package.path
 			local handle = io.popen("uname -s")
 			local result = handle:read("*a")
 			handle:close()
 			print("OS: " .. result:gsub("\n", ""))
 		else
+			package.path = "/usr/bin/rocketlang/?.lua;/usr/local/bin/rocketlang/?.lua;" .. package.path
 			print("OS: Unknown Unix-like OS")
 		end
 		cmdline()
