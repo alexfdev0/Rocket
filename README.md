@@ -37,4 +37,24 @@ lua C:\rocket\rocket.out %*
 ```
 7. Save and close the file.<br>
 8. Add the `C:\rocket` folder to your environment PATH variable.<br>
-9. Run `rocket` or `rocket <file>` to enter the Rocket command line or open a Rocket file.
+9. Run `rocket` or `rocket <file>` to enter the Rocket command line or open a Rocket file.<br><br>
+
+# Running Rocket for Roblox<br>
+If you're on Roblox and would like to run Rocket, follow the below guide.<br><br>
+
+1. Download the `rocket.rbxm` (core) and `roblox.rbxm` (standard library) and insert them into your game.<br>
+2. Publish your game if you haven't already.<br>
+3. Enable 'Allow HTTP Requests' in Game Settings > Security.<br>
+4. Enable loadstring by clicking on ServerScripService in the explorer tab and checking the box labeled 'LoadStringEnabled'<br>
+5. Create a script and require the Rocket ModuleScript with the below code:<br>
+```lua
+local Rocket = require(RocketFolder.Rocket)
+```
+6. Call the execute function to execute some code, preferably using the multi-line string operator. Use the following as an example:<br>
+```lua
+Rocket.Execute([[
+    require "workspace.roblox";
+    print "Hello world!";
+]])
+```
+7. Replace `workspace.roblox` with the path to the standard library ModuleScript or you'll only be able to use native functions.
