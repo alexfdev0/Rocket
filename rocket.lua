@@ -950,6 +950,7 @@ interpret = function(text, args)
 				tokens = tokens,
 				args = args,
 				variables = variables,
+				functions = functions,
 				scopes = scopes,
 				throwNew = throwNew, 
 				checkArgs = checkArgs,
