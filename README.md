@@ -45,7 +45,7 @@ If you're on Roblox and would like to run Rocket, follow the below guide.<br><br
 1. Download the `rocket.rbxm` (core) and `roblox.rbxm` (standard library) and insert them into your game.<br>
 2. Publish your game if you haven't already.<br>
 3. Enable 'Allow HTTP Requests' in Game Settings > Security.<br>
-4. Enable loadstring by clicking on ServerScripService in the explorer tab and checking the box labeled 'LoadStringEnabled'<br>
+4. Enable loadstring by clicking on ServerScriptService in the explorer tab and checking the box labeled 'LoadStringEnabled'<br>
 5. Create a script and require the Rocket ModuleScript with the below code:<br>
 ```lua
 local Rocket = require(RocketFolder.Rocket)
