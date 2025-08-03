@@ -259,7 +259,7 @@ local function parseInput(valstart, tokens, checkfor, allowderef, scope)
 	end
 	-- Check for arithmetic operation
 	local opsect = tokens[valstart + 1]
-	if opsect == "+" or opsect == "-" or opsect == "*" or opsect == "/" or opsect == "^" or opsect == "<<" or opsect == "!=" then
+	if opsect == "+" or opsect == "-" or opsect == "*" or opsect == "/" or opsect == "^" or opsect == "<<" or opsect == "!=" or opsect == "==" then
 		local fnum = tokens[valstart]
 		local lnum = tokens[valstart + 2]
 		-- Check type of arithmetic
@@ -271,14 +271,26 @@ local function parseInput(valstart, tokens, checkfor, allowderef, scope)
 			lstr = parseInput(1, { lstr }, true, false, scope)
 
 			return fstr .. lstr
-		elseif opsect == "!=" then
+		elseif opsect == "!=" or opsect == "==" then
+			local noreverse = false
+			if opsect == "==" then
+				noreverse = true
+			end
 			local fval = parseInput(1, { tokens[valstart] }, true, false, scope)
 			local lval = parseInput(1, { tokens[valstart + 2] }, true, false, scope)
 
 			if fval == lval then
-				return false
+				if noreverse == false then
+					return false
+				else
+					return true
+				end
 			else
-				return true
+				if noreverse == false then
+					return true
+				else
+					return false
+				end
 			end
 		else
 			-- Check for if they are numbers or variables   
